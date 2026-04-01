@@ -1,0 +1,259 @@
+import { eq, and, gte, lte, sql, desc } from 'drizzle-orm';
+import { db } from '../../common/database.ts';
+import { transactions } from '../../db/schema/transactions.ts';
+import { transactionAttachments } from '../../db/schema/transaction-attachments.ts';
+import { wallets } from '../../db/schema/wallets.ts';
+import {
+  NotFoundError,
+  ForbiddenError,
+  ValidationError,
+} from '../../common/errors.ts';
+import {
+  saveFile,
+  deleteFile,
+  type UploadResult,
+} from '../../utils/file-upload.ts';
+
+type TransactionType = 'income' | 'expense';
+
+async function findTransactionOrFail(transactionId: string, userId: string) {
+  const transaction = await db.query.transactions.findFirst({
+    where: eq(transactions.id, transactionId),
+    with: { transactionAttachments: true },
+  });
+
+  if (!transaction) throw new NotFoundError('Transaction');
+  if (transaction.userId !== userId) throw new ForbiddenError();
+
+  return transaction;
+}
+
+async function updateWalletBalance(walletId: string) {
+  const incomeResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), '0')` })
+    .from(transactions)
+    .where(
+      and(eq(transactions.walletId, walletId), eq(transactions.type, 'income')),
+    );
+
+  const expenseResult = await db
+    .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), '0')` })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.walletId, walletId),
+        eq(transactions.type, 'expense'),
+      ),
+    );
+
+  const income = parseFloat(incomeResult[0]?.total ?? '0');
+  const expense = parseFloat(expenseResult[0]?.total ?? '0');
+  const balance = (income - expense).toFixed(2);
+
+  await db.update(wallets).set({ balance }).where(eq(wallets.id, walletId));
+}
+
+interface ListOptions {
+  type?: TransactionType;
+  walletId?: string;
+  categoryId?: string;
+  startDate?: string;
+  endDate?: string;
+  page: number;
+  limit: number;
+}
+
+export async function listTransactions(userId: string, opts: ListOptions) {
+  const conditions = [eq(transactions.userId, userId)];
+
+  if (opts.type) conditions.push(eq(transactions.type, opts.type));
+  if (opts.walletId) conditions.push(eq(transactions.walletId, opts.walletId));
+  if (opts.categoryId)
+    conditions.push(eq(transactions.categoryId, opts.categoryId));
+  if (opts.startDate)
+    conditions.push(gte(transactions.transactionDate, opts.startDate));
+  if (opts.endDate)
+    conditions.push(lte(transactions.transactionDate, opts.endDate));
+
+  const where = and(...conditions);
+  const offset = (opts.page - 1) * opts.limit;
+
+  const [data, countResult] = await Promise.all([
+    db.query.transactions.findMany({
+      where,
+      with: { transactionAttachments: true },
+      orderBy: [
+        desc(transactions.transactionDate),
+        desc(transactions.createdAt),
+      ],
+      limit: opts.limit,
+      offset,
+    }),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(where),
+  ]);
+
+  const total = countResult[0]?.count ?? 0;
+
+  return {
+    data,
+    meta: {
+      page: opts.page,
+      limit: opts.limit,
+      total,
+      totalPages: Math.ceil(total / opts.limit),
+    },
+  };
+}
+
+export async function getTransaction(transactionId: string, userId: string) {
+  return findTransactionOrFail(transactionId, userId);
+}
+
+export async function createTransaction(
+  userId: string,
+  data: {
+    walletId: string;
+    categoryId: string;
+    type: TransactionType;
+    amount: string;
+    description?: string;
+    transactionDate: string;
+  },
+) {
+  const wallet = await db.query.wallets.findFirst({
+    where: eq(wallets.id, data.walletId),
+  });
+  if (!wallet || wallet.userId !== userId) {
+    throw new ValidationError('Invalid wallet');
+  }
+
+  const [transaction] = await db
+    .insert(transactions)
+    .values({
+      userId,
+      walletId: data.walletId,
+      categoryId: data.categoryId,
+      type: data.type,
+      amount: data.amount,
+      description: data.description ?? null,
+      transactionDate: data.transactionDate,
+    })
+    .returning();
+
+  await updateWalletBalance(data.walletId);
+
+  return { ...transaction!, transactionAttachments: [] };
+}
+
+export async function updateTransaction(
+  transactionId: string,
+  userId: string,
+  data: {
+    walletId?: string;
+    categoryId?: string;
+    type?: TransactionType;
+    amount?: string;
+    description?: string;
+    transactionDate?: string;
+  },
+) {
+  const existing = await findTransactionOrFail(transactionId, userId);
+
+  if (data.walletId) {
+    const wallet = await db.query.wallets.findFirst({
+      where: eq(wallets.id, data.walletId),
+    });
+    if (!wallet || wallet.userId !== userId) {
+      throw new ValidationError('Invalid wallet');
+    }
+  }
+
+  const updateData: Record<string, unknown> = {};
+  if (data.walletId !== undefined) updateData.walletId = data.walletId;
+  if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+  if (data.type !== undefined) updateData.type = data.type;
+  if (data.amount !== undefined) updateData.amount = data.amount;
+  if (data.description !== undefined) updateData.description = data.description;
+  if (data.transactionDate !== undefined)
+    updateData.transactionDate = data.transactionDate;
+
+  const [updated] = await db
+    .update(transactions)
+    .set(updateData)
+    .where(eq(transactions.id, transactionId))
+    .returning();
+
+  // Recalculate balance for affected wallets
+  await updateWalletBalance(existing.walletId);
+  if (data.walletId && data.walletId !== existing.walletId) {
+    await updateWalletBalance(data.walletId);
+  }
+
+  const attachments = await db.query.transactionAttachments.findMany({
+    where: eq(transactionAttachments.transactionId, transactionId),
+  });
+
+  return { ...updated!, transactionAttachments: attachments };
+}
+
+export async function deleteTransaction(transactionId: string, userId: string) {
+  const existing = await findTransactionOrFail(transactionId, userId);
+
+  // Delete associated files from disk
+  if (existing.transactionAttachments) {
+    for (const att of existing.transactionAttachments) {
+      await deleteFile(att.filePath);
+    }
+  }
+
+  await db.delete(transactions).where(eq(transactions.id, transactionId));
+  await updateWalletBalance(existing.walletId);
+}
+
+export async function addAttachment(
+  transactionId: string,
+  userId: string,
+  file: File,
+) {
+  await findTransactionOrFail(transactionId, userId);
+
+  const uploadResult: UploadResult = await saveFile(file);
+
+  const [attachment] = await db
+    .insert(transactionAttachments)
+    .values({
+      transactionId,
+      filePath: uploadResult.filePath,
+      fileName: uploadResult.fileName,
+      mimeType: uploadResult.mimeType,
+      fileSize: uploadResult.fileSize,
+    })
+    .returning();
+
+  return attachment!;
+}
+
+export async function deleteAttachment(
+  transactionId: string,
+  attachmentId: string,
+  userId: string,
+) {
+  await findTransactionOrFail(transactionId, userId);
+
+  const attachment = await db.query.transactionAttachments.findFirst({
+    where: and(
+      eq(transactionAttachments.id, attachmentId),
+      eq(transactionAttachments.transactionId, transactionId),
+    ),
+  });
+
+  if (!attachment) throw new NotFoundError('Attachment');
+
+  await deleteFile(attachment.filePath);
+  await db
+    .delete(transactionAttachments)
+    .where(eq(transactionAttachments.id, attachmentId));
+}
