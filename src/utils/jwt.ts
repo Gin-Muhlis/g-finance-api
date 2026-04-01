@@ -1,4 +1,4 @@
-import { config } from '../common/config.ts';
+import { config } from '@/common/config.ts';
 
 const textEncoder = new TextEncoder();
 
@@ -93,7 +93,7 @@ async function verifyJwt(
     const valid = await crypto.subtle.verify(
       'HMAC',
       key,
-      signature,
+      new Uint8Array(signature),
       textEncoder.encode(data),
     );
     if (!valid) return null;

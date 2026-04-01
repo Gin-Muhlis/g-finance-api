@@ -10,6 +10,20 @@ import { walletModule } from './modules/wallet/index.ts';
 import { categoryModule } from './modules/category/index.ts';
 import { transactionModule } from './modules/transaction/index.ts';
 
+/** Elysia `onError` error union includes types without `message` (e.g. custom status). */
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return '';
+}
+
 const app = new Elysia()
   .use(
     cors({
@@ -45,7 +59,9 @@ const app = new Elysia()
       };
     }
 
-    if (error.message === 'NOT_FOUND') {
+    const message = getErrorMessage(error);
+
+    if (message === 'NOT_FOUND') {
       set.status = 404;
       return {
         error: 'NOT_FOUND',
@@ -54,11 +70,11 @@ const app = new Elysia()
     }
 
     // Elysia validation errors
-    if (error.message?.includes('Expected')) {
+    if (message.includes('Expected')) {
       set.status = 422;
       return {
         error: 'VALIDATION_ERROR',
-        message: error.message,
+        message,
       };
     }
 

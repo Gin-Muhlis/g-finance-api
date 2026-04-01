@@ -36,7 +36,7 @@ export const loggerMiddleware = new Elysia({ name: 'logger' })
       {
         method: request.method,
         path: url.pathname,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'unknown error',
       },
       `Error: ${request.method} ${url.pathname}`,
     );
