@@ -1,7 +1,11 @@
 import { pgTable, uuid, varchar, timestamp, pgEnum } from 'drizzle-orm/pg-core';
 import { users } from './users.ts';
 
-export const categoryTypeEnum = pgEnum('category_type', ['income', 'expense']);
+export const categoryTypeEnum = pgEnum('category_type', [
+  'income',
+  'expense',
+  'allocation',
+]);
 
 export const categories = pgTable('categories', {
   id: uuid('id').primaryKey().defaultRandom(),

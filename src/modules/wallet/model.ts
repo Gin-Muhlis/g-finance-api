@@ -13,14 +13,26 @@ export const createWalletBody = t.Object({
   type: walletTypes,
   balance: t.Optional(t.String({ default: '0' })),
   currency: t.Optional(t.String({ default: 'IDR', maxLength: 10 })),
-  icon: t.Optional(t.String({ maxLength: 100 })),
+  icon: t.Optional(
+    t.String({
+      maxLength: 100,
+      description:
+        'Lucide Vue (lucide-vue-next) icon component name in PascalCase, e.g. Landmark, Wallet',
+    }),
+  ),
 });
 
 export const updateWalletBody = t.Object({
   name: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
   type: t.Optional(walletTypes),
   currency: t.Optional(t.String({ maxLength: 10 })),
-  icon: t.Optional(t.String({ maxLength: 100 })),
+  icon: t.Optional(
+    t.String({
+      maxLength: 100,
+      description:
+        'Lucide Vue (lucide-vue-next) icon component name in PascalCase',
+    }),
+  ),
   isActive: t.Optional(t.Boolean()),
 });
 

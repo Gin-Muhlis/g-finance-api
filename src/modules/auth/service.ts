@@ -15,33 +15,7 @@ import {
   UnauthorizedError,
   NotFoundError,
 } from '../../common/errors.ts';
-
-const DEFAULT_CATEGORIES = [
-  { name: 'Gaji', type: 'income' as const, icon: '💰', color: '#4CAF50' },
-  { name: 'Freelance', type: 'income' as const, icon: '💻', color: '#2196F3' },
-  { name: 'Investasi', type: 'income' as const, icon: '📈', color: '#9C27B0' },
-  { name: 'Hadiah', type: 'income' as const, icon: '🎁', color: '#FF9800' },
-  { name: 'Penjualan', type: 'income' as const, icon: '🏷️', color: '#00BCD4' },
-  { name: 'Lainnya', type: 'income' as const, icon: '📥', color: '#607D8B' },
-  { name: 'Makanan', type: 'expense' as const, icon: '🍔', color: '#F44336' },
-  {
-    name: 'Transportasi',
-    type: 'expense' as const,
-    icon: '🚗',
-    color: '#FF5722',
-  },
-  { name: 'Belanja', type: 'expense' as const, icon: '🛒', color: '#E91E63' },
-  { name: 'Hiburan', type: 'expense' as const, icon: '🎬', color: '#673AB7' },
-  { name: 'Kesehatan', type: 'expense' as const, icon: '🏥', color: '#3F51B5' },
-  {
-    name: 'Pendidikan',
-    type: 'expense' as const,
-    icon: '📚',
-    color: '#009688',
-  },
-  { name: 'Tagihan', type: 'expense' as const, icon: '📄', color: '#795548' },
-  { name: 'Lainnya', type: 'expense' as const, icon: '📤', color: '#9E9E9E' },
-];
+import { DEFAULT_CATEGORIES } from '../../common/default-categories.ts';
 
 export async function register(data: {
   email: string;

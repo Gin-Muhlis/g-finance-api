@@ -1,9 +1,9 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql, asc } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { categories } from '../../db/schema/categories.ts';
 import { NotFoundError, ForbiddenError } from '../../common/errors.ts';
 
-type CategoryType = 'income' | 'expense';
+type CategoryType = 'income' | 'expense' | 'allocation';
 
 async function findCategoryOrFail(categoryId: string, userId: string) {
   const category = await db.query.categories.findFirst({
@@ -16,16 +16,49 @@ async function findCategoryOrFail(categoryId: string, userId: string) {
   return category;
 }
 
-export async function listCategories(userId: string, type?: CategoryType) {
+interface ListCategoriesOptions {
+  type?: CategoryType;
+  page: number;
+  limit: number;
+}
+
+export async function listCategories(
+  userId: string,
+  opts: ListCategoriesOptions,
+) {
   const conditions = [eq(categories.userId, userId)];
-  if (type) {
-    conditions.push(eq(categories.type, type));
+  if (opts.type) {
+    conditions.push(eq(categories.type, opts.type));
   }
 
-  return db.query.categories.findMany({
-    where: and(...conditions),
-    orderBy: (c, { asc }) => [asc(c.name)],
-  });
+  const where = and(...conditions);
+  const offset = (opts.page - 1) * opts.limit;
+
+  const [data, countResult] = await Promise.all([
+    db.query.categories.findMany({
+      where,
+      orderBy: [asc(categories.name)],
+      limit: opts.limit,
+      offset,
+    }),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(categories)
+      .where(where),
+  ]);
+  console.log(data);
+
+  const total = countResult[0]?.count ?? 0;
+
+  return {
+    data,
+    meta: {
+      page: opts.page,
+      limit: opts.limit,
+      total,
+      totalPages: Math.ceil(total / opts.limit),
+    },
+  };
 }
 
 export async function getCategory(categoryId: string, userId: string) {
