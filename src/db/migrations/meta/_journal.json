@@ -15,6 +15,13 @@
       "when": 1776691238557,
       "tag": "0001_narrow_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776699678843,
+      "tag": "0002_loose_queen_noir",
+      "breakpoints": true
     }
   ]
 }

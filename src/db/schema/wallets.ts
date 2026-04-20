@@ -30,6 +30,7 @@ export const wallets = pgTable('wallets', {
   currency: varchar('currency', { length: 10 }).notNull().default('IDR'),
   icon: varchar('icon', { length: 100 }),
   isActive: boolean('is_active').notNull().default(true),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

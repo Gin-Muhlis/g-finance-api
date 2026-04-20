@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, sql, desc } from 'drizzle-orm';
+import { eq, and, gte, lte, sql, desc, isNull } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { transactionAttachments } from '../../db/schema/transaction-attachments.ts';
@@ -23,7 +23,11 @@ async function validateTransactionCategory(
   transactionType: TransactionType,
 ) {
   const category = await db.query.categories.findFirst({
-    where: and(eq(categories.id, categoryId), eq(categories.userId, userId)),
+    where: and(
+      eq(categories.id, categoryId),
+      eq(categories.userId, userId),
+      isNull(categories.deletedAt),
+    ),
   });
   if (!category) throw new ValidationError('Invalid category');
   if (category.type === 'allocation') {
@@ -34,6 +38,7 @@ async function validateTransactionCategory(
   if (category.type !== transactionType) {
     throw new ValidationError('Category type must match transaction type');
   }
+  return category;
 }
 
 async function findTransactionOrFail(transactionId: string, userId: string) {
@@ -144,13 +149,21 @@ export async function createTransaction(
   },
 ) {
   const wallet = await db.query.wallets.findFirst({
-    where: eq(wallets.id, data.walletId),
+    where: and(
+      eq(wallets.id, data.walletId),
+      eq(wallets.userId, userId),
+      isNull(wallets.deletedAt),
+    ),
   });
-  if (!wallet || wallet.userId !== userId) {
+  if (!wallet) {
     throw new ValidationError('Invalid wallet');
   }
 
-  await validateTransactionCategory(userId, data.categoryId, data.type);
+  const category = await validateTransactionCategory(
+    userId,
+    data.categoryId,
+    data.type,
+  );
 
   const [transaction] = await db
     .insert(transactions)
@@ -158,6 +171,8 @@ export async function createTransaction(
       userId,
       walletId: data.walletId,
       categoryId: data.categoryId,
+      walletName: wallet.name,
+      categoryName: category.name,
       type: data.type,
       amount: data.amount,
       description: data.description ?? null,
@@ -184,25 +199,35 @@ export async function updateTransaction(
 ) {
   const existing = await findTransactionOrFail(transactionId, userId);
 
-  if (data.walletId) {
+  const updateData: Record<string, unknown> = {};
+
+  if (data.walletId !== undefined) {
     const wallet = await db.query.wallets.findFirst({
-      where: eq(wallets.id, data.walletId),
+      where: and(
+        eq(wallets.id, data.walletId),
+        eq(wallets.userId, userId),
+        isNull(wallets.deletedAt),
+      ),
     });
-    if (!wallet || wallet.userId !== userId) {
+    if (!wallet) {
       throw new ValidationError('Invalid wallet');
     }
+    updateData.walletId = data.walletId;
+    updateData.walletName = wallet.name;
   }
 
   if (data.categoryId !== undefined || data.type !== undefined) {
     const nextType = (data.type ?? existing.type) as TransactionType;
     const nextCategoryId = data.categoryId ?? existing.categoryId;
-    await validateTransactionCategory(userId, nextCategoryId, nextType);
+    const resolvedCategory = await validateTransactionCategory(
+      userId,
+      nextCategoryId,
+      nextType,
+    );
+    if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
+    if (data.type !== undefined) updateData.type = data.type;
+    updateData.categoryName = resolvedCategory.name;
   }
-
-  const updateData: Record<string, unknown> = {};
-  if (data.walletId !== undefined) updateData.walletId = data.walletId;
-  if (data.categoryId !== undefined) updateData.categoryId = data.categoryId;
-  if (data.type !== undefined) updateData.type = data.type;
   if (data.amount !== undefined) updateData.amount = data.amount;
   if (data.description !== undefined) updateData.description = data.description;
   if (data.transactionDate !== undefined)

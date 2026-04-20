@@ -32,6 +32,8 @@ function formatTransaction(tx: {
   id: string;
   walletId: string;
   categoryId: string;
+  walletName: string | null;
+  categoryName: string | null;
   type: string;
   amount: string;
   description: string | null;
@@ -51,6 +53,8 @@ function formatTransaction(tx: {
     id: tx.id,
     walletId: tx.walletId,
     categoryId: tx.categoryId,
+    walletName: tx.walletName ?? null,
+    categoryName: tx.categoryName ?? null,
     type: tx.type,
     amount: tx.amount,
     description: tx.description,

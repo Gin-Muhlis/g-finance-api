@@ -3,10 +3,13 @@ import { authGuard } from '../../common/middleware/auth.ts';
 import {
   createWalletBody,
   updateWalletBody,
+  walletListQuery,
   walletResponse,
   walletListResponse,
 } from './model.ts';
 import * as walletService from './service.ts';
+
+type WalletType = 'bank' | 'e-wallet' | 'cash' | 'savings' | 'investment';
 
 function formatWallet(w: {
   id: string;
@@ -16,6 +19,7 @@ function formatWallet(w: {
   currency: string;
   icon: string | null;
   isActive: boolean;
+  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -23,10 +27,11 @@ function formatWallet(w: {
     id: w.id,
     name: w.name,
     type: w.type,
-    balance: w.balance,
+    balance: Number(w.balance),
     currency: w.currency,
     icon: w.icon,
     isActive: w.isActive,
+    deletedAt: w.deletedAt ? w.deletedAt.toISOString() : null,
     createdAt: w.createdAt.toISOString(),
     updatedAt: w.updatedAt.toISOString(),
   };
@@ -36,11 +41,15 @@ export const walletModule = new Elysia({ prefix: '/wallets' })
   .use(authGuard)
   .get(
     '/',
-    async ({ userId }) => {
-      const wallets = await walletService.listWallets(userId);
+    async ({ userId, query }) => {
+      const wallets = await walletService.listWallets(
+        userId,
+        query.type as WalletType | undefined,
+      );
       return wallets.map(formatWallet);
     },
     {
+      query: walletListQuery,
       response: walletListResponse,
       detail: { tags: ['Wallets'], summary: 'List all wallets' },
     },
@@ -91,6 +100,6 @@ export const walletModule = new Elysia({ prefix: '/wallets' })
     {
       params: t.Object({ id: t.String() }),
       response: walletResponse,
-      detail: { tags: ['Wallets'], summary: 'Deactivate wallet' },
+      detail: { tags: ['Wallets'], summary: 'Soft-delete wallet' },
     },
   );

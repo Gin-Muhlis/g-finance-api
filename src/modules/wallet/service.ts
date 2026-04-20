@@ -1,13 +1,14 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { wallets } from '../../db/schema/wallets.ts';
+import { transactions } from '../../db/schema/transactions.ts';
 import { NotFoundError, ForbiddenError } from '../../common/errors.ts';
 
 type WalletType = 'bank' | 'e-wallet' | 'cash' | 'savings' | 'investment';
 
 async function findWalletOrFail(walletId: string, userId: string) {
   const wallet = await db.query.wallets.findFirst({
-    where: and(eq(wallets.id, walletId)),
+    where: and(eq(wallets.id, walletId), isNull(wallets.deletedAt)),
   });
 
   if (!wallet) throw new NotFoundError('Wallet');
@@ -16,9 +17,14 @@ async function findWalletOrFail(walletId: string, userId: string) {
   return wallet;
 }
 
-export async function listWallets(userId: string) {
+export async function listWallets(userId: string, type?: WalletType) {
+  const conditions = [eq(wallets.userId, userId), isNull(wallets.deletedAt)];
+  if (type) conditions.push(eq(wallets.type, type));
+
+  const where = and(...conditions);
+
   return db.query.wallets.findMany({
-    where: eq(wallets.userId, userId),
+    where,
     orderBy: (w, { desc }) => [desc(w.createdAt)],
   });
 }
@@ -27,12 +33,16 @@ export async function getWallet(walletId: string, userId: string) {
   return findWalletOrFail(walletId, userId);
 }
 
+function balanceToDecimalString(value: number): string {
+  return Number.isFinite(value) ? value.toString() : '0';
+}
+
 export async function createWallet(
   userId: string,
   data: {
     name: string;
     type: WalletType;
-    balance?: string;
+    balance?: number;
     currency?: string;
     icon?: string;
   },
@@ -43,7 +53,7 @@ export async function createWallet(
       userId,
       name: data.name,
       type: data.type,
-      balance: data.balance ?? '0',
+      balance: balanceToDecimalString(data.balance ?? 0),
       currency: data.currency ?? 'IDR',
       icon: data.icon ?? null,
     })
@@ -58,6 +68,7 @@ export async function updateWallet(
   data: {
     name?: string;
     type?: WalletType;
+    balance?: number;
     currency?: string;
     icon?: string;
     isActive?: boolean;
@@ -68,6 +79,8 @@ export async function updateWallet(
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
+  if (data.balance !== undefined)
+    updateData.balance = balanceToDecimalString(data.balance);
   if (data.currency !== undefined) updateData.currency = data.currency;
   if (data.icon !== undefined) updateData.icon = data.icon;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
@@ -75,20 +88,30 @@ export async function updateWallet(
   const [updated] = await db
     .update(wallets)
     .set(updateData)
-    .where(eq(wallets.id, walletId))
+    .where(and(eq(wallets.id, walletId), isNull(wallets.deletedAt)))
     .returning();
 
   return updated!;
 }
 
 export async function deleteWallet(walletId: string, userId: string) {
-  await findWalletOrFail(walletId, userId);
+  const wallet = await findWalletOrFail(walletId, userId);
 
-  const [deactivated] = await db
+  await db
+    .update(transactions)
+    .set({ walletName: wallet.name })
+    .where(
+      and(eq(transactions.walletId, walletId), eq(transactions.userId, userId)),
+    );
+
+  const [softDeleted] = await db
     .update(wallets)
-    .set({ isActive: false })
+    .set({
+      deletedAt: new Date(),
+      isActive: false,
+    })
     .where(eq(wallets.id, walletId))
     .returning();
 
-  return deactivated!;
+  return softDeleted!;
 }

@@ -16,6 +16,7 @@ export const categories = pgTable('categories', {
   type: categoryTypeEnum('type').notNull(),
   icon: varchar('icon', { length: 100 }),
   color: varchar('color', { length: 20 }),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

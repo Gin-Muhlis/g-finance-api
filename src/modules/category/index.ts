@@ -89,11 +89,11 @@ export const categoryModule = new Elysia({ prefix: '/categories' })
     '/:id',
     async ({ userId, params }) => {
       await categoryService.deleteCategory(params.id, userId);
-      return { message: 'Category deleted successfully' };
+      return { message: 'Category soft-deleted successfully' };
     },
     {
       params: t.Object({ id: t.String() }),
       response: messageResponse,
-      detail: { tags: ['Categories'], summary: 'Delete category' },
+      detail: { tags: ['Categories'], summary: 'Soft-delete category' },
     },
   );
