@@ -20,6 +20,8 @@ export const authGuard = new Elysia({ name: 'auth-guard' }).derive(
 
     return {
       userId: payload.sub,
+      userName: payload.name,
+      userEmail: payload.email,
     };
   },
 );
