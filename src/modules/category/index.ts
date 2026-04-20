@@ -33,18 +33,26 @@ export const categoryModule = new Elysia({ prefix: '/categories' })
   .get(
     '/',
     async ({ userId, query }) => {
-      const cats = await categoryService.listCategories(
-        userId,
-        query.type as 'income' | 'expense' | undefined,
-      );
-      return cats.map(formatCategory);
+      const page = Math.max(1, parseInt(query.page ?? '1'));
+      const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20')));
+
+      const result = await categoryService.listCategories(userId, {
+        type: query.type as 'income' | 'expense' | 'allocation',
+        page,
+        limit,
+      });
+
+      return {
+        data: result.data.map(formatCategory),
+        meta: result.meta,
+      };
     },
     {
       query: categoryQuery,
       response: categoryListResponse,
       detail: {
         tags: ['Categories'],
-        summary: 'List categories (optionally filter by type)',
+        summary: 'List categories with filters and pagination',
       },
     },
   )

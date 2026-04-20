@@ -3,6 +3,7 @@ import { db } from '../../common/database.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { transactionAttachments } from '../../db/schema/transaction-attachments.ts';
 import { wallets } from '../../db/schema/wallets.ts';
+import { categories } from '../../db/schema/categories.ts';
 import {
   NotFoundError,
   ForbiddenError,
@@ -15,6 +16,25 @@ import {
 } from '../../utils/file-upload.ts';
 
 type TransactionType = 'income' | 'expense';
+
+async function validateTransactionCategory(
+  userId: string,
+  categoryId: string,
+  transactionType: TransactionType,
+) {
+  const category = await db.query.categories.findFirst({
+    where: and(eq(categories.id, categoryId), eq(categories.userId, userId)),
+  });
+  if (!category) throw new ValidationError('Invalid category');
+  if (category.type === 'allocation') {
+    throw new ValidationError(
+      'Allocation categories cannot be used for transactions',
+    );
+  }
+  if (category.type !== transactionType) {
+    throw new ValidationError('Category type must match transaction type');
+  }
+}
 
 async function findTransactionOrFail(transactionId: string, userId: string) {
   const transaction = await db.query.transactions.findFirst({
@@ -130,6 +150,8 @@ export async function createTransaction(
     throw new ValidationError('Invalid wallet');
   }
 
+  await validateTransactionCategory(userId, data.categoryId, data.type);
+
   const [transaction] = await db
     .insert(transactions)
     .values({
@@ -169,6 +191,12 @@ export async function updateTransaction(
     if (!wallet || wallet.userId !== userId) {
       throw new ValidationError('Invalid wallet');
     }
+  }
+
+  if (data.categoryId !== undefined || data.type !== undefined) {
+    const nextType = (data.type ?? existing.type) as TransactionType;
+    const nextCategoryId = data.categoryId ?? existing.categoryId;
+    await validateTransactionCategory(userId, nextCategoryId, nextType);
   }
 
   const updateData: Record<string, unknown> = {};

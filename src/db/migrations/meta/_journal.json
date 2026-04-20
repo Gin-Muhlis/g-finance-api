@@ -8,6 +8,13 @@
       "when": 1775052893372,
       "tag": "0000_jazzy_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776691238557,
+      "tag": "0001_narrow_leper_queen",
+      "breakpoints": true
     }
   ]
 }
