@@ -8,7 +8,7 @@ import {
 } from './model.ts';
 import * as walletService from './service.ts';
 
-function formatWallet(w: {
+function formatWallet(walletRecord: {
   id: string;
   name: string;
   type: string;
@@ -20,15 +20,15 @@ function formatWallet(w: {
   updatedAt: Date;
 }) {
   return {
-    id: w.id,
-    name: w.name,
-    type: w.type,
-    balance: w.balance,
-    currency: w.currency,
-    icon: w.icon,
-    isActive: w.isActive,
-    createdAt: w.createdAt.toISOString(),
-    updatedAt: w.updatedAt.toISOString(),
+    id: walletRecord.id,
+    name: walletRecord.name,
+    type: walletRecord.type,
+    balance: walletRecord.balance,
+    currency: walletRecord.currency,
+    icon: walletRecord.icon,
+    isActive: walletRecord.isActive,
+    createdAt: walletRecord.createdAt.toISOString(),
+    updatedAt: walletRecord.updatedAt.toISOString(),
   };
 }
 

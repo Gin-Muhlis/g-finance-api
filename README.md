@@ -428,55 +428,55 @@ When creating or updating a transaction, **`categoryId`** must refer to a catego
 
 #### `GET /transactions`
 
-**Query parameters** (all optional)
+Returns transactions **grouped by calendar day** (`transactionsByDay`). Each day’s `transactions` array is ordered by `createdAt` (newest first, matching the query). **Days** are ordered **newest date first** (e.g. 2026-01-16 before 2026-01-15). Only days that have at least one transaction appear.
 
-| Param        | Type   | Description |
-| ------------ | ------ | ----------- |
-| `type`       | string | `income` or `expense` |
-| `walletId`   | string | Filter by wallet UUID |
-| `categoryId` | string | Filter by category UUID |
-| `startDate`  | string | ISO date `YYYY-MM-DD` |
-| `endDate`    | string | ISO date `YYYY-MM-DD` |
-| `page`       | string | Default `"1"`; parsed as positive integer |
-| `limit`      | string | Default `"20"`; clamped 1–100 |
+**`startDate`** and **`endDate`** are **required** (inclusive `YYYY-MM-DD` filter). If `startDate` is after `endDate`, the API returns a validation error.
+
+Optional filters: `type`, `walletId`, `categoryId`. Each list item still includes the full **transaction** row, **`categoryName`**, **`walletName`**, nested **category** and **wallet** (no attachment list on this endpoint). **`totalIncome`** / **`totalExpense`** sum `amount` for `income` / `expense` over the same filter window.
+
+**Query parameters**
+
+| Param        | Type   | Required | Description |
+| ------------ | ------ | -------- | ----------- |
+| `startDate`  | string | **yes**  | ISO date `YYYY-MM-DD` (inclusive) |
+| `endDate`    | string | **yes**  | ISO date `YYYY-MM-DD` (inclusive) |
+| `type`       | string | no       | `income` or `expense` |
+| `walletId`   | string | no       | Filter by wallet UUID |
+| `categoryId` | string | no       | Filter by category UUID |
 
 **Response** `200`
 
 ```json
 {
-  "data": [
+  "transactionsByDay": [
     {
-      "id": "<uuid>",
-      "walletId": "<uuid>",
-      "categoryId": "<uuid>",
-      "type": "expense",
-      "amount": "100.50",
-      "description": "Note",
-      "transactionDate": "2026-01-15",
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-01-01T00:00:00.000Z",
-      "attachments": [
+      "transactionDate": "2026-01-16",
+      "transactions": [
         {
           "id": "<uuid>",
-          "filePath": "…",
-          "fileName": "receipt.jpg",
-          "mimeType": "image/jpeg",
-          "fileSize": 12345,
-          "createdAt": "2026-01-01T00:00:00.000Z"
+          "userId": "<uuid>",
+          "walletId": "<uuid>",
+          "categoryId": "<uuid>",
+          "type": "expense",
+          "amount": "100.50",
+          "description": "Note",
+          "transactionDate": "2026-01-16",
+          "createdAt": "2026-01-01T00:00:00.000Z",
+          "updatedAt": "2026-01-01T00:00:00.000Z",
+          "categoryName": "Makanan",
+          "walletName": "Main",
+          "category": { "id": "<uuid>", "name": "Makanan", "type": "expense" },
+          "wallet": { "id": "<uuid>", "name": "Main", "type": "bank" }
         }
       ]
     }
   ],
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 100,
-    "totalPages": 5
-  }
+  "totalIncome": "0.00",
+  "totalExpense": "100.50"
 }
 ```
 
-`attachments` may be omitted or empty when there are no files.
+A **day** appears only if there is at least one transaction on that day in the range.
 
 ---
 
@@ -493,7 +493,7 @@ When creating or updating a transaction, **`categoryId`** must refer to a catego
 | `description`      | string | Optional; max 500 characters |
 | `transactionDate`  | string | ISO date `YYYY-MM-DD` |
 
-**Response** `200` — single transaction object (same shape as one item in `data` above).
+**Response** `200` — single transaction object (`id`, `walletId`, `categoryId`, `type`, `amount`, `description`, `transactionDate`, `createdAt`, `updatedAt`, optional `attachments`).
 
 ---
 
@@ -579,3 +579,57 @@ When creating or updating a transaction, **`categoryId`** must refer to a catego
   "message": "Attachment deleted successfully"
 }
 ```
+
+---
+
+### Budgets
+
+Monthly **expense** budgets per category. Actual spending comes from existing **transactions** (`type: expense`) in the calendar month—no changes to the transaction model. Only categories with `type: expense` are included.
+
+**Behaviour**
+
+- If no budget exists for the requested month, `budget` is `null` and every expense category still appears with `hasBudget: false` (UI: “No budget”).
+- **`allocatedAmount` − `actualAmount` = `remaining`** (positive = under budget, negative = over budget / use red in UI).
+- **`progressPercent`** = `actual / allocated × 100` (can exceed 100 when over budget).
+- **`isOverBudget`** is `true` when actual spending exceeds the line allocation.
+- **`totals.totalActual`**: sum of actual spending across all expense categories in the month (one aggregate query). **`totals.totalAllocated`**: sum of line allocations where a budget line exists.
+
+#### `GET /budgets`
+
+**Query parameters** (required)
+
+| Param   | Type   | Description        |
+| ------- | ------ | ------------------ |
+| `year`  | string | e.g. `2026`        |
+| `month` | string | `1`–`12`           |
+
+**Response** `200` — period bounds, optional parent `budget`, one row per **expense** category with `hasBudget`, `allocatedAmount`, `actualAmount`, `remaining`, `progressPercent`, `isOverBudget`, and embedded `category`.
+
+#### `PUT /budgets`
+
+Creates or **replaces** the budget for that month (line items are fully replaced). Each `categoryId` must be an **expense** category owned by the user.
+
+**Body** (`application/json`)
+
+| Field          | Type   | Notes |
+| -------------- | ------ | ----- |
+| `year`         | number |       |
+| `month`        | number | 1–12  |
+| `totalBudget`  | string | Optional; overall cap; decimal string |
+| `items`        | array  | `{ "categoryId", "allocatedAmount" }` (amount pattern like transactions) |
+
+**Response** `200` — same shape as `GET /budgets` for that month.
+
+#### `DELETE /budgets/:id`
+
+**Path parameters:** `id` — budget UUID (from `GET` response `budget.id`).
+
+**Response** `200`
+
+```json
+{
+  "message": "Budget deleted successfully"
+}
+```
+
+Run migrations after pulling: `bun run db:migrate` (or `db:push` in dev).

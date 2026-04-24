@@ -9,6 +9,7 @@ import { userModule } from './modules/user/index.ts';
 import { walletModule } from './modules/wallet/index.ts';
 import { categoryModule } from './modules/category/index.ts';
 import { transactionModule } from './modules/transaction/index.ts';
+import { budgetModule } from './modules/budget/index.ts';
 
 /** Elysia `onError` error union includes types without `message` (e.g. custom status). */
 function getErrorMessage(error: unknown): string {
@@ -45,6 +46,7 @@ const app = new Elysia()
           { name: 'Wallets', description: 'Wallet/savings management' },
           { name: 'Categories', description: 'Transaction categories' },
           { name: 'Transactions', description: 'Income & expense tracking' },
+          { name: 'Budgets', description: 'Monthly expense budgets vs actuals' },
         ],
       },
     }),
@@ -96,7 +98,8 @@ const app = new Elysia()
       .use(userModule)
       .use(walletModule)
       .use(categoryModule)
-      .use(transactionModule),
+      .use(transactionModule)
+      .use(budgetModule),
   )
   .listen({
     port: config.port,

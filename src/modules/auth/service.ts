@@ -32,7 +32,7 @@ export async function register(data: {
 
   const passwordHash = await hashPassword(data.password);
 
-  const [user] = await db
+  const [registeredUser] = await db
     .insert(users)
     .values({
       email: data.email.toLowerCase(),
@@ -47,13 +47,13 @@ export async function register(data: {
     });
 
   await db.insert(categories).values(
-    DEFAULT_CATEGORIES.map((cat) => ({
-      ...cat,
-      userId: user!.id,
+    DEFAULT_CATEGORIES.map((categoryDefault) => ({
+      ...categoryDefault,
+      userId: registeredUser!.id,
     })),
   );
 
-  return user!;
+  return registeredUser!;
 }
 
 export async function login(data: {

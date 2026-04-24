@@ -15,6 +15,13 @@
       "when": 1776691238557,
       "tag": "0001_narrow_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777018758178,
+      "tag": "0002_yummy_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

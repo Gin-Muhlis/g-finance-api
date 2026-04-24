@@ -10,7 +10,7 @@ import {
 import { messageResponse } from '../auth/model.ts';
 import * as categoryService from './service.ts';
 
-function formatCategory(c: {
+function formatCategory(categoryRecord: {
   id: string;
   name: string;
   type: string;
@@ -19,12 +19,12 @@ function formatCategory(c: {
   createdAt: Date;
 }) {
   return {
-    id: c.id,
-    name: c.name,
-    type: c.type,
-    icon: c.icon,
-    color: c.color,
-    createdAt: c.createdAt.toISOString(),
+    id: categoryRecord.id,
+    name: categoryRecord.name,
+    type: categoryRecord.type,
+    icon: categoryRecord.icon,
+    color: categoryRecord.color,
+    createdAt: categoryRecord.createdAt.toISOString(),
   };
 }
 

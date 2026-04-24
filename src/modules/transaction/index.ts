@@ -10,7 +10,7 @@ import {
 import { messageResponse } from '../auth/model.ts';
 import * as transactionService from './service.ts';
 
-function formatAttachment(a: {
+function formatAttachment(attachmentRow: {
   id: string;
   filePath: string;
   fileName: string;
@@ -19,16 +19,16 @@ function formatAttachment(a: {
   createdAt: Date;
 }) {
   return {
-    id: a.id,
-    filePath: a.filePath,
-    fileName: a.fileName,
-    mimeType: a.mimeType,
-    fileSize: a.fileSize,
-    createdAt: a.createdAt.toISOString(),
+    id: attachmentRow.id,
+    filePath: attachmentRow.filePath,
+    fileName: attachmentRow.fileName,
+    mimeType: attachmentRow.mimeType,
+    fileSize: attachmentRow.fileSize,
+    createdAt: attachmentRow.createdAt.toISOString(),
   };
 }
 
-function formatTransaction(tx: {
+function formatTransaction(transactionRecord: {
   id: string;
   walletId: string;
   categoryId: string;
@@ -48,16 +48,115 @@ function formatTransaction(tx: {
   }>;
 }) {
   return {
-    id: tx.id,
-    walletId: tx.walletId,
-    categoryId: tx.categoryId,
-    type: tx.type,
-    amount: tx.amount,
-    description: tx.description,
-    transactionDate: tx.transactionDate,
-    createdAt: tx.createdAt.toISOString(),
-    updatedAt: tx.updatedAt.toISOString(),
-    attachments: tx.transactionAttachments?.map(formatAttachment),
+    id: transactionRecord.id,
+    walletId: transactionRecord.walletId,
+    categoryId: transactionRecord.categoryId,
+    type: transactionRecord.type,
+    amount: transactionRecord.amount,
+    description: transactionRecord.description,
+    transactionDate: transactionRecord.transactionDate,
+    createdAt: transactionRecord.createdAt.toISOString(),
+    updatedAt: transactionRecord.updatedAt.toISOString(),
+    attachments: transactionRecord.transactionAttachments?.map(formatAttachment),
+  };
+}
+
+function formatCategoryEmbedded(categoryRecord: {
+  id: string;
+  userId: string;
+  name: string;
+  type: string;
+  icon: string | null;
+  color: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: categoryRecord.id,
+    userId: categoryRecord.userId,
+    name: categoryRecord.name,
+    type: categoryRecord.type,
+    icon: categoryRecord.icon,
+    color: categoryRecord.color,
+    createdAt: categoryRecord.createdAt.toISOString(),
+  };
+}
+
+function formatWalletEmbedded(walletRecord: {
+  id: string;
+  userId: string;
+  name: string;
+  type: string;
+  balance: string;
+  currency: string;
+  icon: string | null;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: walletRecord.id,
+    userId: walletRecord.userId,
+    name: walletRecord.name,
+    type: walletRecord.type,
+    balance: walletRecord.balance,
+    currency: walletRecord.currency,
+    icon: walletRecord.icon,
+    isActive: walletRecord.isActive,
+    createdAt: walletRecord.createdAt.toISOString(),
+    updatedAt: walletRecord.updatedAt.toISOString(),
+  };
+}
+
+function formatListTransactionItem(listItem: {
+  id: string;
+  userId: string;
+  walletId: string;
+  categoryId: string;
+  type: string;
+  amount: string;
+  description: string | null;
+  transactionDate: string;
+  createdAt: Date;
+  updatedAt: Date;
+  wallet: {
+    id: string;
+    userId: string;
+    name: string;
+    type: string;
+    balance: string;
+    currency: string;
+    icon: string | null;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null;
+  category: {
+    id: string;
+    userId: string;
+    name: string;
+    type: string;
+    icon: string | null;
+    color: string | null;
+    createdAt: Date;
+  } | null;
+}) {
+  return {
+    id: listItem.id,
+    userId: listItem.userId,
+    walletId: listItem.walletId,
+    categoryId: listItem.categoryId,
+    type: listItem.type,
+    amount: listItem.amount,
+    description: listItem.description,
+    transactionDate: listItem.transactionDate,
+    createdAt: listItem.createdAt.toISOString(),
+    updatedAt: listItem.updatedAt.toISOString(),
+    categoryName: listItem.category?.name ?? null,
+    walletName: listItem.wallet?.name ?? null,
+    category: listItem.category
+      ? formatCategoryEmbedded(listItem.category)
+      : null,
+    wallet: listItem.wallet ? formatWalletEmbedded(listItem.wallet) : null,
   };
 }
 
@@ -66,22 +165,21 @@ export const transactionModule = new Elysia({ prefix: '/transactions' })
   .get(
     '/',
     async ({ userId, query }) => {
-      const page = Math.max(1, parseInt(query.page ?? '1'));
-      const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20')));
-
       const result = await transactionService.listTransactions(userId, {
         type: query.type as 'income' | 'expense' | undefined,
         walletId: query.walletId,
         categoryId: query.categoryId,
         startDate: query.startDate,
         endDate: query.endDate,
-        page,
-        limit,
       });
 
       return {
-        data: result.data.map(formatTransaction),
-        meta: result.meta,
+        transactionsByDay: result.transactionsByDay.map((dayGroup) => ({
+          transactionDate: dayGroup.transactionDate,
+          transactions: dayGroup.transactions.map(formatListTransactionItem),
+        })),
+        totalIncome: result.totalIncome,
+        totalExpense: result.totalExpense,
       };
     },
     {
@@ -89,7 +187,8 @@ export const transactionModule = new Elysia({ prefix: '/transactions' })
       response: transactionListResponse,
       detail: {
         tags: ['Transactions'],
-        summary: 'List transactions with filters and pagination',
+        summary:
+          'List transactions grouped by day; requires startDate and endDate; includes totals',
       },
     },
   )

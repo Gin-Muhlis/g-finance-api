@@ -77,54 +77,92 @@ interface ListOptions {
   type?: TransactionType;
   walletId?: string;
   categoryId?: string;
-  startDate?: string;
-  endDate?: string;
-  page: number;
-  limit: number;
+  startDate: string;
+  endDate: string;
 }
 
-export async function listTransactions(userId: string, opts: ListOptions) {
-  const conditions = [eq(transactions.userId, userId)];
+function listTransactionsWhere(
+  userId: string,
+  opts: ListOptions,
+) {
+  const conditions = [
+    eq(transactions.userId, userId),
+    gte(transactions.transactionDate, opts.startDate),
+    lte(transactions.transactionDate, opts.endDate),
+  ];
 
   if (opts.type) conditions.push(eq(transactions.type, opts.type));
   if (opts.walletId) conditions.push(eq(transactions.walletId, opts.walletId));
   if (opts.categoryId)
     conditions.push(eq(transactions.categoryId, opts.categoryId));
-  if (opts.startDate)
-    conditions.push(gte(transactions.transactionDate, opts.startDate));
-  if (opts.endDate)
-    conditions.push(lte(transactions.transactionDate, opts.endDate));
 
-  const where = and(...conditions);
-  const offset = (opts.page - 1) * opts.limit;
+  return and(...conditions);
+}
 
-  const [data, countResult] = await Promise.all([
+function toDateKey(value: string | Date): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return String(value).slice(0, 10);
+}
+
+function groupTransactionsByDay<T extends { transactionDate: string | Date }>(
+  rows: T[],
+) {
+  const byDay = new Map<string, T[]>();
+  for (const row of rows) {
+    const dateKey = toDateKey(row.transactionDate);
+    const existing = byDay.get(dateKey);
+    if (existing) existing.push(row);
+    else byDay.set(dateKey, [row]);
+  }
+  const sortedDays = [...byDay.keys()].sort((left, right) =>
+    right.localeCompare(left),
+  );
+  return sortedDays.map((transactionDate) => ({
+    transactionDate,
+    transactions: byDay.get(transactionDate)!,
+  }));
+}
+
+function formatSumAmount(raw: string | null | undefined): string {
+  const parsed = parseFloat(String(raw ?? '0'));
+  if (Number.isNaN(parsed)) return '0.00';
+  return parsed.toFixed(2);
+}
+
+export async function listTransactions(userId: string, opts: ListOptions) {
+  if (opts.startDate > opts.endDate) {
+    throw new ValidationError('startDate must be on or before endDate');
+  }
+
+  const where = listTransactionsWhere(userId, opts);
+
+  const [transactionRows, incomeRow, expenseRow] = await Promise.all([
     db.query.transactions.findMany({
       where,
-      with: { transactionAttachments: true },
+      with: { wallet: true, category: true },
       orderBy: [
         desc(transactions.transactionDate),
         desc(transactions.createdAt),
       ],
-      limit: opts.limit,
-      offset,
     }),
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({
+        total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+      })
       .from(transactions)
-      .where(where),
+      .where(and(where, eq(transactions.type, 'income'))),
+    db
+      .select({
+        total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+      })
+      .from(transactions)
+      .where(and(where, eq(transactions.type, 'expense'))),
   ]);
 
-  const total = countResult[0]?.count ?? 0;
-
   return {
-    data,
-    meta: {
-      page: opts.page,
-      limit: opts.limit,
-      total,
-      totalPages: Math.ceil(total / opts.limit),
-    },
+    transactionsByDay: groupTransactionsByDay(transactionRows),
+    totalIncome: formatSumAmount(incomeRow[0]?.total),
+    totalExpense: formatSumAmount(expenseRow[0]?.total),
   };
 }
 
@@ -152,7 +190,7 @@ export async function createTransaction(
 
   await validateTransactionCategory(userId, data.categoryId, data.type);
 
-  const [transaction] = await db
+  const [createdTransaction] = await db
     .insert(transactions)
     .values({
       userId,
@@ -167,7 +205,7 @@ export async function createTransaction(
 
   await updateWalletBalance(data.walletId);
 
-  return { ...transaction!, transactionAttachments: [] };
+  return { ...createdTransaction!, transactionAttachments: [] };
 }
 
 export async function updateTransaction(
@@ -208,7 +246,7 @@ export async function updateTransaction(
   if (data.transactionDate !== undefined)
     updateData.transactionDate = data.transactionDate;
 
-  const [updated] = await db
+  const [updatedTransaction] = await db
     .update(transactions)
     .set(updateData)
     .where(eq(transactions.id, transactionId))
@@ -224,7 +262,7 @@ export async function updateTransaction(
     where: eq(transactionAttachments.transactionId, transactionId),
   });
 
-  return { ...updated!, transactionAttachments: attachments };
+  return { ...updatedTransaction!, transactionAttachments: attachments };
 }
 
 export async function deleteTransaction(transactionId: string, userId: string) {
@@ -232,8 +270,8 @@ export async function deleteTransaction(transactionId: string, userId: string) {
 
   // Delete associated files from disk
   if (existing.transactionAttachments) {
-    for (const att of existing.transactionAttachments) {
-      await deleteFile(att.filePath);
+    for (const fileAttachment of existing.transactionAttachments) {
+      await deleteFile(fileAttachment.filePath);
     }
   }
 
@@ -250,7 +288,7 @@ export async function addAttachment(
 
   const uploadResult: UploadResult = await saveFile(file);
 
-  const [attachment] = await db
+  const [newAttachment] = await db
     .insert(transactionAttachments)
     .values({
       transactionId,
@@ -261,7 +299,7 @@ export async function addAttachment(
     })
     .returning();
 
-  return attachment!;
+  return newAttachment!;
 }
 
 export async function deleteAttachment(

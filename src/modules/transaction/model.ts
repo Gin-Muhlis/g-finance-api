@@ -24,10 +24,8 @@ export const transactionQuery = t.Object({
   type: t.Optional(transactionTypes),
   walletId: t.Optional(t.String()),
   categoryId: t.Optional(t.String()),
-  startDate: t.Optional(t.String({ format: 'date' })),
-  endDate: t.Optional(t.String({ format: 'date' })),
-  page: t.Optional(t.String({ default: '1' })),
-  limit: t.Optional(t.String({ default: '20' })),
+  startDate: t.String({ format: 'date' }),
+  endDate: t.String({ format: 'date' }),
 });
 
 const attachmentResponse = t.Object({
@@ -52,12 +50,53 @@ export const transactionResponse = t.Object({
   attachments: t.Optional(t.Array(attachmentResponse)),
 });
 
+const categoryInListResponse = t.Object({
+  id: t.String(),
+  userId: t.String(),
+  name: t.String(),
+  type: t.String(),
+  icon: t.Nullable(t.String()),
+  color: t.Nullable(t.String()),
+  createdAt: t.String(),
+});
+
+const walletInListResponse = t.Object({
+  id: t.String(),
+  userId: t.String(),
+  name: t.String(),
+  type: t.String(),
+  balance: t.String(),
+  currency: t.String(),
+  icon: t.Nullable(t.String()),
+  isActive: t.Boolean(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+});
+
+export const transactionListItemResponse = t.Object({
+  id: t.String(),
+  userId: t.String(),
+  walletId: t.String(),
+  categoryId: t.String(),
+  type: t.String(),
+  amount: t.String(),
+  description: t.Nullable(t.String()),
+  transactionDate: t.String(),
+  createdAt: t.String(),
+  updatedAt: t.String(),
+  categoryName: t.Nullable(t.String()),
+  walletName: t.Nullable(t.String()),
+  category: t.Nullable(categoryInListResponse),
+  wallet: t.Nullable(walletInListResponse),
+});
+
+const transactionsByDayGroup = t.Object({
+  transactionDate: t.String(),
+  transactions: t.Array(transactionListItemResponse),
+});
+
 export const transactionListResponse = t.Object({
-  data: t.Array(transactionResponse),
-  meta: t.Object({
-    page: t.Number(),
-    limit: t.Number(),
-    total: t.Number(),
-    totalPages: t.Number(),
-  }),
+  transactionsByDay: t.Array(transactionsByDayGroup),
+  totalIncome: t.String(),
+  totalExpense: t.String(),
 });

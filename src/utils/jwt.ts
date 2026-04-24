@@ -22,7 +22,7 @@ function base64UrlEncode(data: Uint8Array): string {
 function base64UrlDecode(str: string): Uint8Array {
   const padded = str + '='.repeat((4 - (str.length % 4)) % 4);
   const binary = atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
-  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 function parseDuration(duration: string): number {

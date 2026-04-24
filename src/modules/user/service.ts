@@ -8,7 +8,7 @@ export async function updateUser(userId: string, data: { name?: string }) {
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
 
-  const [updated] = await db
+  const [updatedUser] = await db
     .update(users)
     .set(updateData)
     .where(eq(users.id, userId))
@@ -19,9 +19,9 @@ export async function updateUser(userId: string, data: { name?: string }) {
       createdAt: users.createdAt,
     });
 
-  if (!updated) throw new NotFoundError('User');
+  if (!updatedUser) throw new NotFoundError('User');
 
-  return updated;
+  return updatedUser;
 }
 
 export async function changePassword(

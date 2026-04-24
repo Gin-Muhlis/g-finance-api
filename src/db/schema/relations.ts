@@ -5,12 +5,15 @@ import { wallets } from './wallets.ts';
 import { categories } from './categories.ts';
 import { transactions } from './transactions.ts';
 import { transactionAttachments } from './transaction-attachments.ts';
+import { budgets } from './budgets.ts';
+import { budgetItems } from './budget-items.ts';
 
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   wallets: many(wallets),
   categories: many(categories),
   transactions: many(transactions),
+  budgets: many(budgets),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -34,6 +37,26 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
     references: [users.id],
   }),
   transactions: many(transactions),
+  budgetItems: many(budgetItems),
+}));
+
+export const budgetsRelations = relations(budgets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [budgets.userId],
+    references: [users.id],
+  }),
+  items: many(budgetItems),
+}));
+
+export const budgetItemsRelations = relations(budgetItems, ({ one }) => ({
+  budget: one(budgets, {
+    fields: [budgetItems.budgetId],
+    references: [budgets.id],
+  }),
+  category: one(categories, {
+    fields: [budgetItems.categoryId],
+    references: [categories.id],
+  }),
 }));
 
 export const transactionsRelations = relations(

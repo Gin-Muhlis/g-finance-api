@@ -24,8 +24,8 @@ async function seed() {
 
   console.log(`✅ Created demo user: ${demoUser!.email}`);
 
-  const categoryValues = DEFAULT_CATEGORIES.map((cat) => ({
-    ...cat,
+  const categoryValues = DEFAULT_CATEGORIES.map((defaultCategory) => ({
+    ...defaultCategory,
     userId: demoUser!.id,
   }));
 
@@ -36,7 +36,7 @@ async function seed() {
   process.exit(0);
 }
 
-seed().catch((err) => {
-  console.error('❌ Seeding failed:', err);
+seed().catch((error) => {
+  console.error('❌ Seeding failed:', error);
   process.exit(1);
 });

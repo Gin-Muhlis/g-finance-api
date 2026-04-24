@@ -34,7 +34,7 @@ export async function listCategories(
   const where = and(...conditions);
   const offset = (opts.page - 1) * opts.limit;
 
-  const [data, countResult] = await Promise.all([
+  const [categoryRows, countResult] = await Promise.all([
     db.query.categories.findMany({
       where,
       orderBy: [asc(categories.name)],
@@ -46,12 +46,11 @@ export async function listCategories(
       .from(categories)
       .where(where),
   ]);
-  console.log(data);
 
   const total = countResult[0]?.count ?? 0;
 
   return {
-    data,
+    data: categoryRows,
     meta: {
       page: opts.page,
       limit: opts.limit,
@@ -74,7 +73,7 @@ export async function createCategory(
     color?: string;
   },
 ) {
-  const [category] = await db
+  const [newCategory] = await db
     .insert(categories)
     .values({
       userId,
@@ -85,7 +84,7 @@ export async function createCategory(
     })
     .returning();
 
-  return category!;
+  return newCategory!;
 }
 
 export async function updateCategory(
@@ -104,13 +103,13 @@ export async function updateCategory(
   if (data.icon !== undefined) updateData.icon = data.icon;
   if (data.color !== undefined) updateData.color = data.color;
 
-  const [updated] = await db
+  const [updatedCategory] = await db
     .update(categories)
     .set(updateData)
     .where(eq(categories.id, categoryId))
     .returning();
 
-  return updated!;
+  return updatedCategory!;
 }
 
 export async function deleteCategory(categoryId: string, userId: string) {

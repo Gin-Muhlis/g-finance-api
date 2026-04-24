@@ -19,7 +19,7 @@ async function findWalletOrFail(walletId: string, userId: string) {
 export async function listWallets(userId: string) {
   return db.query.wallets.findMany({
     where: eq(wallets.userId, userId),
-    orderBy: (w, { desc }) => [desc(w.createdAt)],
+    orderBy: (wallet, { desc }) => [desc(wallet.createdAt)],
   });
 }
 
@@ -37,7 +37,7 @@ export async function createWallet(
     icon?: string;
   },
 ) {
-  const [wallet] = await db
+  const [newWallet] = await db
     .insert(wallets)
     .values({
       userId,
@@ -49,7 +49,7 @@ export async function createWallet(
     })
     .returning();
 
-  return wallet!;
+  return newWallet!;
 }
 
 export async function updateWallet(
@@ -72,23 +72,23 @@ export async function updateWallet(
   if (data.icon !== undefined) updateData.icon = data.icon;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
-  const [updated] = await db
+  const [updatedWallet] = await db
     .update(wallets)
     .set(updateData)
     .where(eq(wallets.id, walletId))
     .returning();
 
-  return updated!;
+  return updatedWallet!;
 }
 
 export async function deleteWallet(walletId: string, userId: string) {
   await findWalletOrFail(walletId, userId);
 
-  const [deactivated] = await db
+  const [deactivatedWallet] = await db
     .update(wallets)
     .set({ isActive: false })
     .where(eq(wallets.id, walletId))
     .returning();
 
-  return deactivated!;
+  return deactivatedWallet!;
 }
