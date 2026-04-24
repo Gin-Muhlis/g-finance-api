@@ -233,6 +233,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -435,6 +441,18 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "wallet_name": {
+          "name": "wallet_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "category_name": {
+          "name": "category_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
         },
         "type": {
           "name": "type",
@@ -641,6 +659,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

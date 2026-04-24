@@ -41,6 +41,8 @@ export const transactionResponse = t.Object({
   id: t.String(),
   walletId: t.String(),
   categoryId: t.String(),
+  walletName: t.Nullable(t.String()),
+  categoryName: t.Nullable(t.String()),
   type: t.String(),
   amount: t.String(),
   description: t.Nullable(t.String()),

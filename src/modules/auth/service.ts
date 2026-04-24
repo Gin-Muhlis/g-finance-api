@@ -77,7 +77,11 @@ export async function login(data: {
 
   const rememberMe = data.rememberMe ?? false;
 
-  const accessToken = await generateAccessToken(user.id);
+  const accessToken = await generateAccessToken({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  });
   const refreshToken = await generateRefreshToken(user.id, rememberMe);
 
   const tokenHash = hashToken(refreshToken);
@@ -115,7 +119,18 @@ export async function refresh(token: string) {
   // Token rotation: delete old token
   await db.delete(refreshTokens).where(eq(refreshTokens.id, stored.id));
 
-  const accessToken = await generateAccessToken(stored.userId);
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, stored.userId),
+  });
+  if (!user) {
+    throw new UnauthorizedError('User not found');
+  }
+
+  const accessToken = await generateAccessToken({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  });
   const newRefreshToken = await generateRefreshToken(stored.userId);
   const newTokenHash = hashToken(newRefreshToken);
   const expiresAt = getRefreshTokenExpiresAt();

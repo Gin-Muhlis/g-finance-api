@@ -39,10 +39,21 @@ function parseDuration(duration: string): number {
   return value * multipliers[unit]!;
 }
 
-interface JwtPayload {
+export interface AccessTokenPayload {
+  sub: string;
+  name: string;
+  email: string;
+  iat: number;
+  exp: number;
+}
+
+export interface JwtPayload {
   sub: string;
   iat: number;
   exp: number;
+  name?: string;
+  email?: string;
+  type?: string;
   [key: string]: unknown;
 }
 
@@ -78,7 +89,7 @@ async function signJwt(
   return `${data}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
-async function verifyJwt(
+async function verifyJwtRaw(
   token: string,
   secret: string,
 ): Promise<JwtPayload | null> {
@@ -112,9 +123,13 @@ async function verifyJwt(
   }
 }
 
-export async function generateAccessToken(userId: string): Promise<string> {
+export async function generateAccessToken(user: {
+  id: string;
+  name: string;
+  email: string;
+}): Promise<string> {
   return signJwt(
-    { sub: userId },
+    { sub: user.id, name: user.name, email: user.email },
     config.jwt.accessSecret,
     config.jwt.accessExpiresIn,
   );
@@ -137,14 +152,29 @@ export async function generateRefreshToken(
 
 export async function verifyAccessToken(
   token: string,
-): Promise<JwtPayload | null> {
-  return verifyJwt(token, config.jwt.accessSecret);
+): Promise<AccessTokenPayload | null> {
+  const payload = await verifyJwtRaw(token, config.jwt.accessSecret);
+  if (!payload) return null;
+  if (
+    typeof payload.sub !== 'string' ||
+    typeof payload.name !== 'string' ||
+    typeof payload.email !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    sub: payload.sub,
+    name: payload.name,
+    email: payload.email,
+    iat: payload.iat,
+    exp: payload.exp,
+  };
 }
 
 export async function verifyRefreshToken(
   token: string,
 ): Promise<JwtPayload | null> {
-  return verifyJwt(token, config.jwt.refreshSecret);
+  return verifyJwtRaw(token, config.jwt.refreshSecret);
 }
 
 export function getRefreshTokenExpiresAt(rememberMe = false): Date {

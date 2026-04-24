@@ -1,13 +1,14 @@
-import { eq, and, sql, asc } from 'drizzle-orm';
+import { eq, and, sql, asc, isNull } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { categories } from '../../db/schema/categories.ts';
+import { transactions } from '../../db/schema/transactions.ts';
 import { NotFoundError, ForbiddenError } from '../../common/errors.ts';
 
 type CategoryType = 'income' | 'expense' | 'allocation';
 
 async function findCategoryOrFail(categoryId: string, userId: string) {
   const category = await db.query.categories.findFirst({
-    where: eq(categories.id, categoryId),
+    where: and(eq(categories.id, categoryId), isNull(categories.deletedAt)),
   });
 
   if (!category) throw new NotFoundError('Category');
@@ -26,7 +27,10 @@ export async function listCategories(
   userId: string,
   opts: ListCategoriesOptions,
 ) {
-  const conditions = [eq(categories.userId, userId)];
+  const conditions = [
+    eq(categories.userId, userId),
+    isNull(categories.deletedAt),
+  ];
   if (opts.type) {
     conditions.push(eq(categories.type, opts.type));
   }
@@ -106,14 +110,27 @@ export async function updateCategory(
   const [updatedCategory] = await db
     .update(categories)
     .set(updateData)
-    .where(eq(categories.id, categoryId))
+    .where(and(eq(categories.id, categoryId), isNull(categories.deletedAt)))
     .returning();
 
   return updatedCategory!;
 }
 
 export async function deleteCategory(categoryId: string, userId: string) {
-  await findCategoryOrFail(categoryId, userId);
+  const category = await findCategoryOrFail(categoryId, userId);
 
-  await db.delete(categories).where(eq(categories.id, categoryId));
+  await db
+    .update(transactions)
+    .set({ categoryName: category.name })
+    .where(
+      and(
+        eq(transactions.categoryId, categoryId),
+        eq(transactions.userId, userId),
+      ),
+    );
+
+  await db
+    .update(categories)
+    .set({ deletedAt: new Date() })
+    .where(eq(categories.id, categoryId));
 }

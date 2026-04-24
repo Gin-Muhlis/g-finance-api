@@ -32,6 +32,8 @@ function formatTransaction(transactionRecord: {
   id: string;
   walletId: string;
   categoryId: string;
+  walletName: string | null;
+  categoryName: string | null;
   type: string;
   amount: string;
   description: string | null;
@@ -112,6 +114,8 @@ function formatListTransactionItem(listItem: {
   userId: string;
   walletId: string;
   categoryId: string;
+  walletName: string | null;
+  categoryName: string | null;
   type: string;
   amount: string;
   description: string | null;

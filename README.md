@@ -71,14 +71,14 @@ Authorization: Bearer <accessToken>
 
 Unless otherwise noted, errors use JSON with `error` (machine-readable code) and `message` (human-readable text). Examples:
 
-| HTTP status | Typical `error`        | When |
-| ----------- | ---------------------- | ---- |
-| 401         | `UNAUTHORIZED`         | Missing/invalid/expired token |
-| 403         | `FORBIDDEN`            | Access denied for resource |
-| 404         | `NOT_FOUND`            | Resource or route not found |
-| 409         | `CONFLICT`             | e.g. duplicate email |
-| 422         | `VALIDATION_ERROR`     | Request body/query validation failed |
-| 500         | `INTERNAL_SERVER_ERROR` | Unexpected server error |
+| HTTP status | Typical `error`         | When                                 |
+| ----------- | ----------------------- | ------------------------------------ |
+| 401         | `UNAUTHORIZED`          | Missing/invalid/expired token        |
+| 403         | `FORBIDDEN`             | Access denied for resource           |
+| 404         | `NOT_FOUND`             | Resource or route not found          |
+| 409         | `CONFLICT`              | e.g. duplicate email                 |
+| 422         | `VALIDATION_ERROR`      | Request body/query validation failed |
+| 500         | `INTERNAL_SERVER_ERROR` | Unexpected server error              |
 
 ---
 
@@ -127,12 +127,12 @@ Unless otherwise noted, errors use JSON with `error` (machine-readable code) and
 
 **Body** (`application/json`)
 
-| Field          | Type    | Constraints                          |
-| -------------- | ------- | ------------------------------------ |
-| `email`        | string  | Valid email format                   |
-| `password`     | string  | Min length 1                         |
-| `rememberMe`   | boolean | Optional; default `false`            |
-| `deviceInfo`   | string  | Optional; max 512 characters         |
+| Field        | Type    | Constraints                  |
+| ------------ | ------- | ---------------------------- |
+| `email`      | string  | Valid email format           |
+| `password`   | string  | Min length 1                 |
+| `rememberMe` | boolean | Optional; default `false`    |
+| `deviceInfo` | string  | Optional; max 512 characters |
 
 **Response** `200`
 
@@ -149,9 +149,9 @@ Unless otherwise noted, errors use JSON with `error` (machine-readable code) and
 
 **Body** (`application/json`)
 
-| Field            | Type   | Constraints   |
-| ---------------- | ------ | ------------- |
-| `refreshToken`   | string | Min length 1  |
+| Field          | Type   | Constraints  |
+| -------------- | ------ | ------------ |
+| `refreshToken` | string | Min length 1 |
 
 **Response** `200`
 
@@ -168,9 +168,9 @@ Unless otherwise noted, errors use JSON with `error` (machine-readable code) and
 
 **Body** (`application/json`)
 
-| Field            | Type   | Constraints   |
-| ---------------- | ------ | ------------- |
-| `refreshToken`   | string | Min length 1  |
+| Field          | Type   | Constraints  |
+| -------------- | ------ | ------------ |
+| `refreshToken` | string | Min length 1 |
 
 **Response** `200`
 
@@ -207,9 +207,9 @@ All routes require **Bearer** access token.
 
 **Body** (`application/json`)
 
-| Field  | Type   | Constraints                    |
-| ------ | ------ | ------------------------------ |
-| `name` | string | Optional; 1–255 if provided    |
+| Field  | Type   | Constraints                 |
+| ------ | ------ | --------------------------- |
+| `name` | string | Optional; 1–255 if provided |
 
 **Response** `200` — same shape as `GET /auth/me`.
 
@@ -219,10 +219,10 @@ All routes require **Bearer** access token.
 
 **Body** (`application/json`)
 
-| Field              | Type   | Constraints        |
-| ------------------ | ------ | ------------------ |
-| `currentPassword`  | string | Min length 1       |
-| `newPassword`      | string | 8–128 characters   |
+| Field             | Type   | Constraints      |
+| ----------------- | ------ | ---------------- |
+| `currentPassword` | string | Min length 1     |
+| `newPassword`     | string | 8–128 characters |
 
 **Response** `200`
 
@@ -248,7 +248,7 @@ All routes require **Bearer** access token.
     "id": "<uuid>",
     "name": "Main account",
     "type": "bank",
-    "balance": "0.00",
+    "balance": 0,
     "currency": "IDR",
     "icon": "Landmark",
     "isActive": true,
@@ -266,13 +266,13 @@ All routes require **Bearer** access token.
 
 **Body** (`application/json`)
 
-| Field       | Type   | Notes |
-| ----------- | ------ | ----- |
-| `name`      | string | 1–255 characters |
-| `type`      | string | `bank` \| `e-wallet` \| `cash` \| `savings` \| `investment` |
-| `balance`   | string | Optional; default `"0"` |
-| `currency`  | string | Optional; default `"IDR"`; max 10 chars |
-| `icon`      | string | Optional; Lucide Vue icon name (PascalCase), max 100 characters — see [Lucide icon names](#lucide-icon-names) |
+| Field      | Type   | Notes                                                                                                         |
+| ---------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `name`     | string | 1–255 characters                                                                                              |
+| `type`     | string | `bank` \| `e-wallet` \| `cash` \| `savings` \| `investment`                                                   |
+| `balance`  | number | Optional; default `0`; must be ≥ 0                                                                            |
+| `currency` | string | Optional; default `"IDR"`; max 10 chars                                                                       |
+| `icon`     | string | Optional; Lucide Vue icon name (PascalCase), max 100 characters — see [Lucide icon names](#lucide-icon-names) |
 
 **Response** `200` — single wallet object (same fields as one element in the list above).
 
@@ -282,9 +282,9 @@ All routes require **Bearer** access token.
 
 **Path parameters**
 
-| Param | Type   | Description   |
-| ----- | ------ | ------------- |
-| `id`  | string | Wallet UUID   |
+| Param | Type   | Description |
+| ----- | ------ | ----------- |
+| `id`  | string | Wallet UUID |
 
 **Response** `200` — single wallet object.
 
@@ -296,13 +296,14 @@ All routes require **Bearer** access token.
 
 **Body** (`application/json`) — all fields optional:
 
-| Field       | Type    | Notes |
-| ----------- | ------- | ----- |
-| `name`      | string  | 1–255 if provided |
-| `type`      | string  | Same enum as create |
-| `currency`  | string  | Max 10 characters |
-| `icon`      | string  | Lucide Vue icon name (PascalCase), max 100 characters |
-| `isActive`  | boolean | |
+| Field      | Type    | Notes                                                 |
+| ---------- | ------- | ----------------------------------------------------- |
+| `name`     | string  | 1–255 if provided                                     |
+| `type`     | string  | Same enum as create                                   |
+| `balance`  | number  | Optional; must be ≥ 0 if provided                     |
+| `currency` | string  | Max 10 characters                                     |
+| `icon`     | string  | Lucide Vue icon name (PascalCase), max 100 characters |
+| `isActive` | boolean |                                                       |
 
 **Response** `200` — updated wallet object.
 
@@ -340,11 +341,11 @@ See the full set on [Lucide icons](https://lucide.dev/icons/).
 
 **Query parameters** (all optional)
 
-| Param   | Type   | Description |
-| ------- | ------ | ----------- |
+| Param   | Type   | Description                                  |
+| ------- | ------ | -------------------------------------------- |
 | `type`  | string | Filter: `income`, `expense`, or `allocation` |
-| `page`  | string | Default `"1"`; parsed as a positive integer |
-| `limit` | string | Default `"20"`; clamped between 1 and 100 |
+| `page`  | string | Default `"1"`; parsed as a positive integer  |
+| `limit` | string | Default `"20"`; clamped between 1 and 100    |
 
 Results are ordered by **name** (ascending).
 
@@ -377,12 +378,12 @@ Results are ordered by **name** (ascending).
 
 **Body** (`application/json`)
 
-| Field   | Type   | Notes |
-| ------- | ------ | ----- |
-| `name`  | string | 1–255 characters |
-| `type`  | string | `income`, `expense`, or `allocation` |
+| Field   | Type   | Notes                                                                                       |
+| ------- | ------ | ------------------------------------------------------------------------------------------- |
+| `name`  | string | 1–255 characters                                                                            |
+| `type`  | string | `income`, `expense`, or `allocation`                                                        |
 | `icon`  | string | Optional; Lucide Vue icon name (PascalCase), max 100 — e.g. `BadgeIndianRupee`, `ChartLine` |
-| `color` | string | Optional; max 20 characters (e.g. hex) |
+| `color` | string | Optional; max 20 characters (e.g. hex)                                                      |
 
 **Response** `200` — single category object.
 
@@ -394,11 +395,11 @@ Results are ordered by **name** (ascending).
 
 **Body** (`application/json`) — all optional:
 
-| Field   | Type   | Notes |
-| ------- | ------ | ----- |
-| `name`  | string | 1–255 if provided |
+| Field   | Type   | Notes                                                 |
+| ------- | ------ | ----------------------------------------------------- |
+| `name`  | string | 1–255 if provided                                     |
 | `icon`  | string | Lucide Vue icon name (PascalCase), max 100 characters |
-| `color` | string | Max 20 characters |
+| `color` | string | Max 20 characters                                     |
 
 **`type`** cannot be updated; create a new category if you need a different type.
 
@@ -484,14 +485,14 @@ A **day** appears only if there is at least one transaction on that day in the r
 
 **Body** (`application/json`)
 
-| Field              | Type   | Notes |
-| ------------------ | ------ | ----- |
-| `walletId`         | string | UUID |
-| `categoryId`       | string | UUID |
-| `type`             | string | `income` or `expense` |
-| `amount`           | string | Decimal string, e.g. `100` or `99.50` (up to 2 decimal places) |
-| `description`      | string | Optional; max 500 characters |
-| `transactionDate`  | string | ISO date `YYYY-MM-DD` |
+| Field             | Type   | Notes                                                          |
+| ----------------- | ------ | -------------------------------------------------------------- |
+| `walletId`        | string | UUID                                                           |
+| `categoryId`      | string | UUID                                                           |
+| `type`            | string | `income` or `expense`                                          |
+| `amount`          | string | Decimal string, e.g. `100` or `99.50` (up to 2 decimal places) |
+| `description`     | string | Optional; max 500 characters                                   |
+| `transactionDate` | string | ISO date `YYYY-MM-DD`                                          |
 
 **Response** `200` — single transaction object (`id`, `walletId`, `categoryId`, `type`, `amount`, `description`, `transactionDate`, `createdAt`, `updatedAt`, optional `attachments`).
 
@@ -511,14 +512,14 @@ A **day** appears only if there is at least one transaction on that day in the r
 
 **Body** (`application/json`) — all fields optional:
 
-| Field              | Type   | Notes |
-| ------------------ | ------ | ----- |
-| `walletId`         | string | UUID |
-| `categoryId`       | string | UUID |
-| `type`             | string | `income` or `expense` |
-| `amount`           | string | Same pattern as create |
-| `description`      | string | Max 500 characters |
-| `transactionDate`  | string | ISO date `YYYY-MM-DD` |
+| Field             | Type   | Notes                  |
+| ----------------- | ------ | ---------------------- |
+| `walletId`        | string | UUID                   |
+| `categoryId`      | string | UUID                   |
+| `type`            | string | `income` or `expense`  |
+| `amount`          | string | Same pattern as create |
+| `description`     | string | Max 500 characters     |
+| `transactionDate` | string | ISO date `YYYY-MM-DD`  |
 
 **Response** `200` — updated transaction object.
 
@@ -544,9 +545,9 @@ A **day** appears only if there is at least one transaction on that day in the r
 
 **Body** (`multipart/form-data`)
 
-| Field  | Type | Description        |
-| ------ | ---- | ------------------ |
-| `file` | file | Binary upload      |
+| Field  | Type | Description   |
+| ------ | ---- | ------------- |
+| `file` | file | Binary upload |
 
 **Response** `200`
 
@@ -567,10 +568,10 @@ A **day** appears only if there is at least one transaction on that day in the r
 
 **Path parameters**
 
-| Param           | Type   | Description        |
-| --------------- | ------ | ------------------ |
-| `id`            | string | Transaction UUID   |
-| `attachmentId`  | string | Attachment UUID    |
+| Param          | Type   | Description      |
+| -------------- | ------ | ---------------- |
+| `id`           | string | Transaction UUID |
+| `attachmentId` | string | Attachment UUID  |
 
 **Response** `200`
 

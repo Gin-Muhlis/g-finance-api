@@ -27,6 +27,8 @@ export const transactions = pgTable('transactions', {
   categoryId: uuid('category_id')
     .notNull()
     .references(() => categories.id, { onDelete: 'restrict' }),
+  walletName: varchar('wallet_name', { length: 255 }),
+  categoryName: varchar('category_name', { length: 255 }),
   type: transactionTypeEnum('type').notNull(),
   amount: decimal('amount', { precision: 15, scale: 2 }).notNull(),
   description: varchar('description', { length: 500 }),
