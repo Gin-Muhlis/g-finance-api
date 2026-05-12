@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, sql, desc, isNull } from 'drizzle-orm';
+import { eq, and, or, gte, lte, sql, desc, isNull, inArray } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { transactionAttachments } from '../../db/schema/transaction-attachments.ts';
@@ -15,14 +15,26 @@ import {
   type UploadResult,
 } from '../../utils/file-upload.ts';
 
+function parsePositiveAmount(amount: string): number {
+  const n = parseFloat(amount);
+  if (Number.isNaN(n) || n <= 0) return Number.NaN;
+  return n;
+}
+
 type TransactionType = 'income' | 'expense';
+
+/** `db` atau `tx` dari `db.transaction` (keduanya punya `.query` / `.select` / …). */
+type DbOrTransaction =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function validateTransactionCategory(
   userId: string,
   categoryId: string,
   transactionType: TransactionType,
+  client: DbOrTransaction = db,
 ) {
-  const category = await db.query.categories.findFirst({
+  const category = await client.query.categories.findFirst({
     where: and(
       eq(categories.id, categoryId),
       eq(categories.userId, userId),
@@ -30,11 +42,6 @@ async function validateTransactionCategory(
     ),
   });
   if (!category) throw new ValidationError('Invalid category');
-  if (category.type === 'allocation') {
-    throw new ValidationError(
-      'Allocation categories cannot be used for transactions',
-    );
-  }
   if (category.type !== transactionType) {
     throw new ValidationError('Category type must match transaction type');
   }
@@ -53,16 +60,26 @@ async function findTransactionOrFail(transactionId: string, userId: string) {
   return transaction;
 }
 
-async function updateWalletBalance(walletId: string) {
-  const incomeResult = await db
-    .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), '0')` })
+/**
+ * Net pengaruh transaksi terhadap dompet: income − expense + transfer masuk − transfer keluar.
+ */
+export async function computeWalletLedgerNet(
+  walletId: string,
+  client: DbOrTransaction = db,
+): Promise<number> {
+  const [incomeResult] = await client
+    .select({
+      total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+    })
     .from(transactions)
     .where(
       and(eq(transactions.walletId, walletId), eq(transactions.type, 'income')),
     );
 
-  const expenseResult = await db
-    .select({ total: sql<string>`COALESCE(SUM(${transactions.amount}), '0')` })
+  const [expenseResult] = await client
+    .select({
+      total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+    })
     .from(transactions)
     .where(
       and(
@@ -71,11 +88,57 @@ async function updateWalletBalance(walletId: string) {
       ),
     );
 
-  const income = parseFloat(incomeResult[0]?.total ?? '0');
-  const expense = parseFloat(expenseResult[0]?.total ?? '0');
-  const balance = (income - expense).toFixed(2);
+  const [transferInResult] = await client
+    .select({
+      total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.toWalletId, walletId),
+        eq(transactions.type, 'transfer'),
+      ),
+    );
 
-  await db.update(wallets).set({ balance }).where(eq(wallets.id, walletId));
+  const [transferOutResult] = await client
+    .select({
+      total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.fromWalletId, walletId),
+        eq(transactions.type, 'transfer'),
+      ),
+    );
+
+  const totalIncome = parseFloat(incomeResult?.total ?? '0');
+  const totalExpense = parseFloat(expenseResult?.total ?? '0');
+  const transferIn = parseFloat(transferInResult?.total ?? '0');
+  const transferOut = parseFloat(transferOutResult?.total ?? '0');
+
+  return totalIncome - totalExpense + transferIn - transferOut;
+}
+
+/**
+ * Saldo dompet = balanceBaseline + net transaksi.
+ * Baseline menampung saldo awal saat buat dompet dan penyesuaian manual (tanpa baris transaksi).
+ */
+export async function recalculateWalletBalance(
+  walletId: string,
+  client: DbOrTransaction = db,
+) {
+  const wallet = await client.query.wallets.findFirst({
+    where: eq(wallets.id, walletId),
+  });
+  if (!wallet) return;
+
+  const rawBaseline = parseFloat(String(wallet.balanceBaseline ?? '0'));
+  const baseline = Number.isFinite(rawBaseline) ? rawBaseline : 0;
+  const net = await computeWalletLedgerNet(walletId, client);
+  const balance = (baseline + net).toFixed(2);
+
+  await client.update(wallets).set({ balance }).where(eq(wallets.id, walletId));
 }
 
 interface ListOptions {
@@ -86,14 +149,20 @@ interface ListOptions {
   endDate: string;
 }
 
-function listTransactionsWhere(
-  userId: string,
-  opts: ListOptions,
-) {
+function listTransactionsWhere(userId: string, opts: ListOptions) {
+  /** Transfer alokasi memakai `bucketId`; transfer dompet (tanpa bucket) memakai `bucketId` null. */
+  const typeScope = opts.type
+    ? eq(transactions.type, opts.type)
+    : or(
+        inArray(transactions.type, ['income', 'expense']),
+        and(eq(transactions.type, 'transfer'), isNull(transactions.bucketId)),
+      );
+
   const conditions = [
     eq(transactions.userId, userId),
     gte(transactions.transactionDate, opts.startDate),
     lte(transactions.transactionDate, opts.endDate),
+    typeScope,
   ];
 
   if (opts.type) conditions.push(eq(transactions.type, opts.type));
@@ -144,7 +213,7 @@ export async function listTransactions(userId: string, opts: ListOptions) {
   const [transactionRows, incomeRow, expenseRow] = await Promise.all([
     db.query.transactions.findMany({
       where,
-      with: { wallet: true, category: true },
+      with: { wallet: true, category: true, fromWallet: true, toWallet: true },
       orderBy: [
         desc(transactions.transactionDate),
         desc(transactions.createdAt),
@@ -186,41 +255,117 @@ export async function createTransaction(
     transactionDate: string;
   },
 ) {
-  const wallet = await db.query.wallets.findFirst({
-    where: and(
-      eq(wallets.id, data.walletId),
-      eq(wallets.userId, userId),
-      isNull(wallets.deletedAt),
-    ),
+  return await db.transaction(async (tx) => {
+    const wallet = await tx.query.wallets.findFirst({
+      where: and(
+        eq(wallets.id, data.walletId),
+        eq(wallets.userId, userId),
+        isNull(wallets.deletedAt),
+      ),
+    });
+    if (!wallet) {
+      throw new ValidationError('Invalid wallet');
+    }
+
+    const category = await validateTransactionCategory(
+      userId,
+      data.categoryId,
+      data.type,
+      tx,
+    );
+
+    const [createdTransaction] = await tx
+      .insert(transactions)
+      .values({
+        userId,
+        walletId: data.walletId,
+        categoryId: data.categoryId,
+        walletName: wallet.name,
+        categoryName: category.name,
+        type: data.type,
+        amount: data.amount,
+        description: data.description ?? null,
+        transactionDate: data.transactionDate,
+      })
+      .returning();
+
+    // Saldo = balanceBaseline + net transaksi; transaksi baru sudah terhitung dalam DB yang sama.
+    await recalculateWalletBalance(data.walletId, tx);
+
+    return { ...createdTransaction!, transactionAttachments: [] };
   });
-  if (!wallet) {
-    throw new ValidationError('Invalid wallet');
+}
+
+/**
+ * Transfer saldo antar dompet tanpa alokasi bucket (`bucketId` null).
+ */
+export async function createWalletTransfer(
+  userId: string,
+  data: {
+    fromWalletId: string;
+    toWalletId: string;
+    amount: string;
+    transactionDate: string;
+    description?: string;
+  },
+) {
+  if (data.fromWalletId === data.toWalletId) {
+    throw new ValidationError('Cannot transfer to same wallet');
+  }
+  const amountNum = parsePositiveAmount(data.amount);
+  if (Number.isNaN(amountNum)) {
+    throw new ValidationError('Invalid amount');
   }
 
-  const category = await validateTransactionCategory(
-    userId,
-    data.categoryId,
-    data.type,
-  );
+  return await db.transaction(async (tx) => {
+    const [fromWallet, toWallet] = await Promise.all([
+      tx.query.wallets.findFirst({
+        where: and(
+          eq(wallets.id, data.fromWalletId),
+          eq(wallets.userId, userId),
+          isNull(wallets.deletedAt),
+        ),
+      }),
+      tx.query.wallets.findFirst({
+        where: and(
+          eq(wallets.id, data.toWalletId),
+          eq(wallets.userId, userId),
+          isNull(wallets.deletedAt),
+        ),
+      }),
+    ]);
 
-  const [createdTransaction] = await db
-    .insert(transactions)
-    .values({
-      userId,
-      walletId: data.walletId,
-      categoryId: data.categoryId,
-      walletName: wallet.name,
-      categoryName: category.name,
-      type: data.type,
-      amount: data.amount,
-      description: data.description ?? null,
-      transactionDate: data.transactionDate,
-    })
-    .returning();
+    if (!fromWallet || !toWallet) {
+      throw new ValidationError('Wallet not found');
+    }
+    if (parseFloat(String(fromWallet.balance)) < amountNum) {
+      throw new ValidationError('Insufficient balance');
+    }
 
-  await updateWalletBalance(data.walletId);
+    const [createdTransaction] = await tx
+      .insert(transactions)
+      .values({
+        userId,
+        type: 'transfer',
+        isAllocationWithdraw: false,
+        fromWalletId: data.fromWalletId,
+        toWalletId: data.toWalletId,
+        bucketId: null,
+        amount: data.amount,
+        transactionDate: data.transactionDate,
+        description: data.description ?? null,
+        walletId: null,
+        categoryId: null,
+        walletName: null,
+        categoryName: null,
+      })
+      .returning();
 
-  return { ...createdTransaction!, transactionAttachments: [] };
+    await recalculateWalletBalance(data.fromWalletId, tx);
+    await recalculateWalletBalance(data.toWalletId, tx);
+
+    return { ...createdTransaction!, transactionAttachments: [] };
+  });
 }
 
 export async function updateTransaction(
@@ -236,6 +381,12 @@ export async function updateTransaction(
   },
 ) {
   const existing = await findTransactionOrFail(transactionId, userId);
+
+  if (existing.type === 'transfer') {
+    throw new ValidationError(
+      'Transfer transactions cannot be updated from this endpoint',
+    );
+  }
 
   const updateData: Record<string, unknown> = {};
 
@@ -257,6 +408,9 @@ export async function updateTransaction(
   if (data.categoryId !== undefined || data.type !== undefined) {
     const nextType = (data.type ?? existing.type) as TransactionType;
     const nextCategoryId = data.categoryId ?? existing.categoryId;
+    if (!nextCategoryId) {
+      throw new ValidationError('Category is required');
+    }
     const resolvedCategory = await validateTransactionCategory(
       userId,
       nextCategoryId,
@@ -278,9 +432,11 @@ export async function updateTransaction(
     .returning();
 
   // Recalculate balance for affected wallets
-  await updateWalletBalance(existing.walletId);
+  if (existing.walletId) {
+    await recalculateWalletBalance(existing.walletId);
+  }
   if (data.walletId && data.walletId !== existing.walletId) {
-    await updateWalletBalance(data.walletId);
+    await recalculateWalletBalance(data.walletId);
   }
 
   const attachments = await db.query.transactionAttachments.findMany({
@@ -301,7 +457,16 @@ export async function deleteTransaction(transactionId: string, userId: string) {
   }
 
   await db.delete(transactions).where(eq(transactions.id, transactionId));
-  await updateWalletBalance(existing.walletId);
+  if (existing.type === 'transfer') {
+    if (existing.fromWalletId) {
+      await recalculateWalletBalance(existing.fromWalletId);
+    }
+    if (existing.toWalletId) {
+      await recalculateWalletBalance(existing.toWalletId);
+    }
+  } else if (existing.walletId) {
+    await recalculateWalletBalance(existing.walletId);
+  }
 }
 
 export async function addAttachment(

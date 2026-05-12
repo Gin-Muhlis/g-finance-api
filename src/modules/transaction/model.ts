@@ -11,6 +11,14 @@ export const createTransactionBody = t.Object({
   transactionDate: t.String({ format: 'date' }),
 });
 
+export const walletTransferBody = t.Object({
+  fromWalletId: t.String({ format: 'uuid' }),
+  toWalletId: t.String({ format: 'uuid' }),
+  amount: t.String({ pattern: '^\\d+(\\.\\d{1,2})?$' }),
+  transactionDate: t.String({ format: 'date' }),
+  description: t.Optional(t.String({ maxLength: 500 })),
+});
+
 export const updateTransactionBody = t.Object({
   walletId: t.Optional(t.String({ format: 'uuid' })),
   categoryId: t.Optional(t.String({ format: 'uuid' })),
@@ -39,8 +47,12 @@ const attachmentResponse = t.Object({
 
 export const transactionResponse = t.Object({
   id: t.String(),
-  walletId: t.String(),
-  categoryId: t.String(),
+  walletId: t.Nullable(t.String()),
+  categoryId: t.Nullable(t.String()),
+  fromWalletId: t.Optional(t.Nullable(t.String())),
+  toWalletId: t.Optional(t.Nullable(t.String())),
+  bucketId: t.Optional(t.Nullable(t.String())),
+  isAllocationWithdraw: t.Optional(t.Boolean()),
   walletName: t.Nullable(t.String()),
   categoryName: t.Nullable(t.String()),
   type: t.String(),
@@ -78,8 +90,12 @@ const walletInListResponse = t.Object({
 export const transactionListItemResponse = t.Object({
   id: t.String(),
   userId: t.String(),
-  walletId: t.String(),
-  categoryId: t.String(),
+  walletId: t.Nullable(t.String()),
+  categoryId: t.Nullable(t.String()),
+  fromWalletId: t.Optional(t.Nullable(t.String())),
+  toWalletId: t.Optional(t.Nullable(t.String())),
+  bucketId: t.Optional(t.Nullable(t.String())),
+  isAllocationWithdraw: t.Optional(t.Boolean()),
   type: t.String(),
   amount: t.String(),
   description: t.Nullable(t.String()),
@@ -90,6 +106,8 @@ export const transactionListItemResponse = t.Object({
   walletName: t.Nullable(t.String()),
   category: t.Nullable(categoryInListResponse),
   wallet: t.Nullable(walletInListResponse),
+  fromWallet: t.Optional(t.Nullable(walletInListResponse)),
+  toWallet: t.Optional(t.Nullable(walletInListResponse)),
 });
 
 const transactionsByDayGroup = t.Object({

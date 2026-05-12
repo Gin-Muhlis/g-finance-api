@@ -37,7 +37,7 @@ export const categoryModule = new Elysia({ prefix: '/categories' })
       const limit = Math.min(100, Math.max(1, parseInt(query.limit ?? '20')));
 
       const result = await categoryService.listCategories(userId, {
-        type: query.type as 'income' | 'expense' | 'allocation',
+        type: query.type as 'income' | 'expense' | undefined,
         page,
         limit,
       });

@@ -27,6 +27,10 @@ export const wallets = pgTable('wallets', {
   balance: decimal('balance', { precision: 15, scale: 2 })
     .notNull()
     .default('0'),
+  /** Saldo awal / penyesuaian manual: tidak tercermin sebagai baris transaksi. `balance` = baseline + net transaksi. */
+  balanceBaseline: decimal('balance_baseline', { precision: 15, scale: 2 })
+    .notNull()
+    .default('0'),
   currency: varchar('currency', { length: 10 }).notNull().default('IDR'),
   icon: varchar('icon', { length: 100 }),
   isActive: boolean('is_active').notNull().default(true),

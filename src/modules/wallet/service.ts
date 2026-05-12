@@ -3,6 +3,7 @@ import { db } from '../../common/database.ts';
 import { wallets } from '../../db/schema/wallets.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { NotFoundError, ForbiddenError } from '../../common/errors.ts';
+import { computeWalletLedgerNet } from '../transaction/service.ts';
 
 type WalletType = 'bank' | 'e-wallet' | 'cash' | 'savings' | 'investment';
 
@@ -47,13 +48,15 @@ export async function createWallet(
     icon?: string;
   },
 ) {
+  const initial = balanceToDecimalString(data.balance ?? 0);
   const [newWallet] = await db
     .insert(wallets)
     .values({
       userId,
       name: data.name,
       type: data.type,
-      balance: balanceToDecimalString(data.balance ?? 0),
+      balance: initial,
+      balanceBaseline: initial,
       currency: data.currency ?? 'IDR',
       icon: data.icon ?? null,
     })
@@ -79,8 +82,12 @@ export async function updateWallet(
   const updateData: Record<string, unknown> = {};
   if (data.name !== undefined) updateData.name = data.name;
   if (data.type !== undefined) updateData.type = data.type;
-  if (data.balance !== undefined)
+  if (data.balance !== undefined) {
+    const txNet = await computeWalletLedgerNet(walletId);
+    const newBaseline = data.balance - txNet;
     updateData.balance = balanceToDecimalString(data.balance);
+    updateData.balanceBaseline = balanceToDecimalString(newBaseline);
+  }
   if (data.currency !== undefined) updateData.currency = data.currency;
   if (data.icon !== undefined) updateData.icon = data.icon;
   if (data.isActive !== undefined) updateData.isActive = data.isActive;

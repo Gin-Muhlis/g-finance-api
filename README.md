@@ -53,7 +53,7 @@ bun run dev
 
 ## API Documentation
 
-After starting the server, visit `http://localhost:3000/swagger` for interactive API docs.
+After starting the server, visit `http://localhost:3000/swagger` for interactive API docs (includes **Buckets**, **Allocations**, and **`POST /transactions/wallet-transfer`** under Transactions).
 
 ## API reference
 
@@ -238,7 +238,15 @@ All routes require **Bearer** access token.
 
 All routes require **Bearer** access token.
 
+Reported **`balance`** is **recalculated from transactions**: income and expense on the primary `walletId`, plus **transfers** where this wallet is the destination (`toWalletId`) or source (`fromWalletId`). See [Allocations](#allocations) for transfers tagged with a **bucket**.
+
 #### `GET /wallets`
+
+**Query parameters** (optional)
+
+| Param  | Type   | Description                                      |
+| ------ | ------ | ------------------------------------------------ |
+| `type` | string | Filter: `bank`, `e-wallet`, `cash`, `savings`, `investment` |
 
 **Response** `200` — JSON array of wallet objects:
 
@@ -252,11 +260,14 @@ All routes require **Bearer** access token.
     "currency": "IDR",
     "icon": "Landmark",
     "isActive": true,
+    "deletedAt": null,
     "createdAt": "2026-01-01T00:00:00.000Z",
     "updatedAt": "2026-01-01T00:00:00.000Z"
   }
 ]
 ```
+
+`balance` is a JSON **number** (bukan string desimal). `deletedAt` adalah ISO datetime atau `null` jika dompet masih aktif.
 
 `type` is one of: `bank`, `e-wallet`, `cash`, `savings`, `investment`.
 
@@ -270,7 +281,7 @@ All routes require **Bearer** access token.
 | ---------- | ------ | ------------------------------------------------------------------------------------------------------------- |
 | `name`     | string | 1–255 characters                                                                                              |
 | `type`     | string | `bank` \| `e-wallet` \| `cash` \| `savings` \| `investment`                                                   |
-| `balance`  | number | Optional; default `0`; must be ≥ 0                                                                            |
+| `balance`  | number | Optional; default `0`; must be ≥ 0 (JSON number, sama seperti respons)                                       |
 | `currency` | string | Optional; default `"IDR"`; max 10 chars                                                                       |
 | `icon`     | string | Optional; Lucide Vue icon name (PascalCase), max 100 characters — see [Lucide icon names](#lucide-icon-names) |
 
@@ -321,9 +332,9 @@ All routes require **Bearer** access token.
 
 All routes require **Bearer** access token.
 
-**`type`** on a category is one of: `income`, `expense`, or **`allocation`**. It is set at **create** time only and **cannot** be changed later. Use **`allocation`** for budgeting / savings buckets (e.g. emergency fund, goal-based pots). Transactions only support `income` and `expense`; you **cannot** attach an `allocation` category to a transaction (see [Transactions](#transactions)).
+**`type`** pada kategori hanya **`income`** atau **`expense`**. Diatur saat **create** dan **tidak** bisa diubah lewat `PUT` (buat kategori baru jika perlu tipe lain). Tabungan / dana tujuan terpisah ada di [Buckets](#buckets) dan alur [Allocations](#allocations), bukan sebagai tipe kategori.
 
-Property **`icon`** (nullable) stores the **Lucide Vue** ([`lucide-vue-next`](https://lucide.dev)) icon **component name** in **PascalCase** (e.g. `Wallet`, `CircleDollarSign`) — not emoji. The client resolves the string to a component from the library. Registration and `db:seed` create default categories (income, expense, and **allocation** buckets such as `PiggyBank`, `Vault`, `ChartPie`) alongside names like `CircleDollarSign`, `ShoppingBasket`, `ReceiptText`.
+Property **`icon`** (nullable) menyimpan nama **komponen Lucide Vue** ([`lucide-vue-next`](https://lucide.dev)) dalam **PascalCase** (mis. `Wallet`, `CircleDollarSign`) — bukan emoji. `db:seed` membuat kategori default pendapatan dan pengeluaran (mis. `CircleDollarSign`, `ShoppingBasket`, `ReceiptText`).
 
 #### Lucide icon names
 
@@ -341,9 +352,9 @@ See the full set on [Lucide icons](https://lucide.dev/icons/).
 
 **Query parameters** (all optional)
 
-| Param   | Type   | Description                                  |
-| ------- | ------ | -------------------------------------------- |
-| `type`  | string | Filter: `income`, `expense`, or `allocation` |
+| Param   | Type   | Description                         |
+| ------- | ------ | ----------------------------------- |
+| `type`  | string | Filter: `income` atau `expense`     |
 | `page`  | string | Default `"1"`; parsed as a positive integer  |
 | `limit` | string | Default `"20"`; clamped between 1 and 100    |
 
@@ -381,7 +392,7 @@ Results are ordered by **name** (ascending).
 | Field   | Type   | Notes                                                                                       |
 | ------- | ------ | ------------------------------------------------------------------------------------------- |
 | `name`  | string | 1–255 characters                                                                            |
-| `type`  | string | `income`, `expense`, or `allocation`                                                        |
+| `type`  | string | `income` atau `expense`                                                                     |
 | `icon`  | string | Optional; Lucide Vue icon name (PascalCase), max 100 — e.g. `BadgeIndianRupee`, `ChartLine` |
 | `color` | string | Optional; max 20 characters (e.g. hex)                                                      |
 
@@ -415,7 +426,7 @@ Results are ordered by **name** (ascending).
 
 ```json
 {
-  "message": "Category deleted successfully"
+  "message": "Category soft-deleted successfully"
 }
 ```
 
@@ -425,7 +436,14 @@ Results are ordered by **name** (ascending).
 
 All routes require **Bearer** access token.
 
-When creating or updating a transaction, **`categoryId`** must refer to a category whose **`type`** matches the transaction’s **`type`** (`income` or `expense`). Categories with **`type: allocation`** cannot be used on transactions.
+The data model supports **`income`**, **`expense`**, **`transfer`** (termasuk alokasi ber-bucket). **`GET /transactions`** mengembalikan:
+
+- semua **`income`** dan **`expense`** dalam rentang tanggal;
+- plus **`transfer`** yang **bukan** alokasi bucket (**`bucketId` null**) — pemindahan antar dompet via **`POST /transactions/wallet-transfer`**.
+
+Transfer yang punya **`bucketId`** (alur [Allocations](#allocations)) **tidak** muncul di endpoint ini — gunakan **`GET /allocations`**.
+
+Saat **`POST /transactions`** atau **`PUT /transactions/:id`**, **`categoryId`** harus mengarah ke kategori **`type`** yang sama dengan transaksi (**hanya** `income` atau `expense`).
 
 #### `GET /transactions`
 
@@ -433,7 +451,7 @@ Returns transactions **grouped by calendar day** (`transactionsByDay`). Each day
 
 **`startDate`** and **`endDate`** are **required** (inclusive `YYYY-MM-DD` filter). If `startDate` is after `endDate`, the API returns a validation error.
 
-Optional filters: `type`, `walletId`, `categoryId`. Each list item still includes the full **transaction** row, **`categoryName`**, **`walletName`**, nested **category** and **wallet** (no attachment list on this endpoint). **`totalIncome`** / **`totalExpense`** sum `amount` for `income` / `expense` over the same filter window.
+Optional filters: `type`, `walletId`, `categoryId`. Untuk **`transfer`** tanpa bucket, **`walletId`** / **`categoryId`** bisa **`null`**; gunakan **`fromWallet`** / **`toWallet`** pada item daftar. **`totalIncome`** / **`totalExpense`** hanya menjumlahkan baris **`income`** / **`expense`** (transfer tidak masuk total tersebut).
 
 **Query parameters**
 
@@ -441,7 +459,7 @@ Optional filters: `type`, `walletId`, `categoryId`. Each list item still include
 | ------------ | ------ | -------- | ----------- |
 | `startDate`  | string | **yes**  | ISO date `YYYY-MM-DD` (inclusive) |
 | `endDate`    | string | **yes**  | ISO date `YYYY-MM-DD` (inclusive) |
-| `type`       | string | no       | `income` or `expense` |
+| `type`       | string | no       | `income` atau `expense` (filter ketat; transfer tidak ikut jika dipilih) |
 | `walletId`   | string | no       | Filter by wallet UUID |
 | `categoryId` | string | no       | Filter by category UUID |
 
@@ -458,6 +476,9 @@ Optional filters: `type`, `walletId`, `categoryId`. Each list item still include
           "userId": "<uuid>",
           "walletId": "<uuid>",
           "categoryId": "<uuid>",
+          "fromWalletId": null,
+          "toWalletId": null,
+          "bucketId": null,
           "type": "expense",
           "amount": "100.50",
           "description": "Note",
@@ -466,8 +487,29 @@ Optional filters: `type`, `walletId`, `categoryId`. Each list item still include
           "updatedAt": "2026-01-01T00:00:00.000Z",
           "categoryName": "Makanan",
           "walletName": "Main",
-          "category": { "id": "<uuid>", "name": "Makanan", "type": "expense" },
-          "wallet": { "id": "<uuid>", "name": "Main", "type": "bank" }
+          "category": {
+            "id": "<uuid>",
+            "userId": "<uuid>",
+            "name": "Makanan",
+            "type": "expense",
+            "icon": "ShoppingBasket",
+            "color": "#F44336",
+            "createdAt": "2026-01-01T00:00:00.000Z"
+          },
+          "wallet": {
+            "id": "<uuid>",
+            "userId": "<uuid>",
+            "name": "Main",
+            "type": "bank",
+            "balance": "0.00",
+            "currency": "IDR",
+            "icon": null,
+            "isActive": true,
+            "createdAt": "2026-01-01T00:00:00.000Z",
+            "updatedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "fromWallet": null,
+          "toWallet": null
         }
       ]
     }
@@ -476,6 +518,8 @@ Optional filters: `type`, `walletId`, `categoryId`. Each list item still include
   "totalExpense": "100.50"
 }
 ```
+
+Pada **`transfer`** dompet (tanpa bucket), **`wallet`** / **`category`** bisa **`null`** dan **`fromWallet`** / **`toWallet`** terisi (saldo dompet di objek embed adalah string desimal).
 
 A **day** appears only if there is at least one transaction on that day in the range.
 
@@ -494,7 +538,25 @@ A **day** appears only if there is at least one transaction on that day in the r
 | `description`     | string | Optional; max 500 characters                                   |
 | `transactionDate` | string | ISO date `YYYY-MM-DD`                                          |
 
-**Response** `200` — single transaction object (`id`, `walletId`, `categoryId`, `type`, `amount`, `description`, `transactionDate`, `createdAt`, `updatedAt`, optional `attachments`).
+**Response** `200` — objek transaksi: `id`, `walletId`, `categoryId`, `fromWalletId`, `toWalletId`, `bucketId`, `isAllocationWithdraw` (jika relevan), `type`, `amount`, `description`, `transactionDate`, `createdAt`, `updatedAt`, `walletName`, `categoryName`, **`attachments`** (array jika ada).
+
+---
+
+#### `POST /transactions/wallet-transfer`
+
+Membuat **`transfer`** antar dompet **tanpa** bucket ( **`bucketId` null** ). Tidak sama dengan **`POST /allocations`** (transfer ber-tag bucket).
+
+**Body** (`application/json`)
+
+| Field             | Type   | Notes                                                          |
+| ----------------- | ------ | -------------------------------------------------------------- |
+| `fromWalletId`    | string | UUID dompet sumber                                             |
+| `toWalletId`      | string | UUID dompet tujuan                                             |
+| `amount`          | string | Decimal string, pola sama seperti create transaksi             |
+| `transactionDate` | string | ISO date `YYYY-MM-DD`                                          |
+| `description`     | string | Opsional; max 500 karakter                                     |
+
+**Response** **`204`** — tanpa body; saldo dompet diperbarui di server.
 
 ---
 
@@ -503,6 +565,8 @@ A **day** appears only if there is at least one transaction on that day in the r
 **Path parameters:** `id` (transaction UUID).
 
 **Response** `200` — transaction object (may include `attachments`).
+
+If the row is **`transfer`**, `walletId` and `categoryId` may be **`null`**, and the response can include: **`fromWalletId`**, **`toWalletId`**, **`bucketId`**, **`isAllocationWithdraw`**. Transfer ber-bucket dibuat lewat [Allocations](#allocations); transfer dompet tanpa bucket lewat **`POST /transactions/wallet-transfer`**. Nilai **`amount`** pada baris selalu positif menurut konvensi ledger.
 
 ---
 
@@ -523,11 +587,15 @@ A **day** appears only if there is at least one transaction on that day in the r
 
 **Response** `200` — updated transaction object.
 
+**`PUT`** is not supported for rows with `type: transfer` (gunakan alur alokasi atau buat transfer baru; mengembalikan error validasi).
+
 ---
 
 #### `DELETE /transactions/:id`
 
 **Path parameters:** `id` (transaction UUID).
+
+Deleting a **`transfer`** recalculates both affected wallets. Deleting an **income** or **expense** recalculates the related wallet. Attachments, if any, are removed from storage.
 
 **Response** `200`
 
@@ -583,17 +651,148 @@ A **day** appears only if there is at least one transaction on that day in the r
 
 ---
 
+### Buckets
+
+Savings / goal “envelopes” di tabel **`buckets`** (terpisah dari [Budgets](#budgets) bulanan). Saldo agregat per bucket dihitung dari **transfer** yang terhubung ke bucket itu (lihat [Allocations](#allocations)).
+
+All routes require **Bearer** access token.
+
+#### `GET /buckets`
+
+**Response** `200` — array of bucket objects, each with an aggregate **`balance`** (decimal string from the transfer ledger, signed using internal rules for allocate vs withdraw):
+
+```json
+[
+  {
+    "id": "<uuid>",
+    "name": "Dana darurat",
+    "type": "emergency",
+    "targetAmount": "1000000.00",
+    "icon": "Shield",
+    "color": "#2196F3",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:00:00.000Z",
+    "balance": "150000.00"
+  }
+]
+```
+
+#### `POST /buckets`
+
+**Body** (`application/json`)
+
+| Field          | Type   | Notes |
+| -------------- | ------ | ----- |
+| `name`         | string | Required; 1–100 characters |
+| `type`         | string | Optional; e.g. `saving`, `emergency` |
+| `targetAmount` | string | Optional; decimal string like transactions |
+| `icon`         | string | Optional; max 100 characters |
+| `color`        | string | Optional; max 20 characters |
+
+**Response** `200` — created bucket (includes `id`, `userId`, `createdAt`, `updatedAt`, etc.; no `balance` until an allocation row exists).
+
+---
+
+### Allocations
+
+Wallet-to-wallet **transfers** with an optional **bucket** tag (`type: transfer` in the database). The server runs operations in a **DB transaction** and recalculates **wallet** balances; wallet balance = income − expense + transfers in − transfers out for that wallet. Each allocation row stores **`isAllocationWithdraw`**: `false` for `POST /allocations`, `true` for `POST /allocations/withdraw`. Use these endpoints instead of `POST /transactions` for this flow.
+
+All routes require **Bearer** access token.
+
+**Route order (implementation):** specific paths are registered so `GET/POST` do not shadow each other: e.g. `GET /allocations/summary` and `POST /allocations/withdraw` are distinct from `GET/POST` `/allocations`.
+
+#### `GET /allocations/summary`
+
+**Response** `200`
+
+```json
+{
+  "totalBalance": 5000000,
+  "totalAllocated": 1200000,
+  "available": 3800000
+}
+```
+
+- **`totalBalance`**: sum of **non-deleted** wallet `balance` for the user.
+- **`totalAllocated`**: sum of **signed** bucket-tagged **transfer** amounts (net from allocate vs withdraw).
+- **`available`**: `totalBalance - totalAllocated`.
+
+#### `GET /allocations`
+
+**Query parameters** (optional)
+
+| Param      | Type   | Description        |
+| ---------- | ------ | ------------------ |
+| `bucketId`        | string | Filter by bucket UUID (`uuid`) |
+
+**Response** `200` — array of `transfer` rows with relations **`fromWallet`**, **`toWallet`**, **`bucket`** (simplified: wallet id, name, type, balance as string, currency; bucket id and name), ordered by `transactionDate` (newest first), then `createdAt`.
+
+#### `POST /allocations`
+
+**Body** (`application/json`)
+
+| Field             | Type   | Notes |
+| ----------------- | ------ | ----- |
+| `fromWalletId`    | string | Source wallet UUID (must be yours) |
+| `toWalletId`      | string | Destination wallet UUID |
+| `bucketId`        | string | Bucket UUID |
+| `amount`          | string | Decimal string; must be positive; source must have enough balance |
+| `transactionDate` | string | `YYYY-MM-DD` |
+| `description`     | string | Optional; max 500 characters |
+
+**Response** `200` — objek transfer dengan `type: "transfer"`; **`fromWallet`**, **`toWallet`**, dan **`bucket`** biasanya **`null`** pada respons create — muat ulang dengan **`GET /allocations`** untuk relasi lengkap. Contoh bentuk:
+
+```json
+{
+  "id": "<uuid>",
+  "userId": "<uuid>",
+  "type": "transfer",
+  "isAllocationWithdraw": false,
+  "fromWalletId": "<uuid>",
+  "toWalletId": "<uuid>",
+  "bucketId": "<uuid>",
+  "amount": "50000.00",
+  "description": null,
+  "transactionDate": "2026-01-16",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "fromWallet": null,
+  "toWallet": null,
+  "bucket": null
+}
+```
+
+#### `POST /allocations/withdraw`
+
+Money movement marked as a **withdraw** from the bucket ledger (`isAllocationWithdraw: true`). The server checks **bucket net balance** and **source wallet** balance before inserting the transfer.
+
+**Body** (`application/json`)
+
+| Field             | Type   | Notes |
+| ----------------- | ------ | ----- |
+| `fromWalletId`    | string | Source wallet UUID |
+| `toWalletId`      | string | Destination wallet UUID |
+| `bucketId`        | string | Bucket UUID |
+| `amount`          | string | Must not exceed bucket net and wallet balance (with validation messages) |
+| `transactionDate` | string | Optional; default today `YYYY-MM-DD` |
+| `description`     | string | Optional; max 500 characters |
+
+**Response** `200` — created transfer, same response shape as `POST /allocations`.
+
+---
+
 ### Budgets
 
-Monthly **expense** budgets per category. Actual spending comes from existing **transactions** (`type: expense`) in the calendar month—no changes to the transaction model. Only categories with `type: expense` are included.
+Anggaran bulanan: **`totalBudget`** sebagai plafon keseluruhan dan **`items`** alokasi per kategori **pengeluaran**. Pengeluaran aktual dihitung dari **transaksi** **`type: expense`** dengan `categoryId` tidak null dalam bulan kalender tersebut; baris **transfer** tidak ikut.
 
-**Behaviour**
+**Perilaku**
 
-- If no budget exists for the requested month, `budget` is `null` and every expense category still appears with `hasBudget: false` (UI: “No budget”).
-- **`allocatedAmount` − `actualAmount` = `remaining`** (positive = under budget, negative = over budget / use red in UI).
-- **`progressPercent`** = `actual / allocated × 100` (can exceed 100 when over budget).
-- **`isOverBudget`** is `true` when actual spending exceeds the line allocation.
-- **`totals.totalActual`**: sum of actual spending across all expense categories in the month (one aggregate query). **`totals.totalAllocated`**: sum of line allocations where a budget line exists.
+- **`GET /budgets`** hanya mengembalikan **ringkasan agregat** untuk bulan itu (`period`, `budget` opsional, `totals`) — **tanpa** daftar perkategori.
+- **`GET /budgets/items`** mengembalikan satu baris per kategori **expense** (dengan pagination): `hasBudget`, nominal alokasi/aktual, sisa, persentase progres, dll.
+- Jika belum ada budget untuk bulan itu, **`GET /budgets`** mengembalikan **`budget: null`** dan **`totals.totalAllocated`** bernilai **`"0.00"`**; pada **`GET /budgets/items`** setiap kategori pengeluaran tetap ada dengan **`hasBudget: false`**.
+- **`PUT /budgets`** mewajibkan **`totalBudget`** sebagai angka **lebih dari 0**; jumlah **`items[].allocatedAmount`** tidak boleh melebihi **`totalBudget`**.
+- **`allocatedAmount` − `actualAmount` = `remaining`** (positif = di bawah anggaran baris tersebut).
+- **`totals.totalActual`** (di **`GET /budgets`**) = total pengeluaran expense di bulan itu. **`totals.totalAllocated`** = nilai **`budget.totalBudget`** jika ada budget, selain itu **`"0.00"`** — ini **bukan** jumlah alokasi per kategori.
 
 #### `GET /budgets`
 
@@ -604,26 +803,104 @@ Monthly **expense** budgets per category. Actual spending comes from existing **
 | `year`  | string | e.g. `2026`        |
 | `month` | string | `1`–`12`           |
 
-**Response** `200` — period bounds, optional parent `budget`, one row per **expense** category with `hasBudget`, `allocatedAmount`, `actualAmount`, `remaining`, `progressPercent`, `isOverBudget`, and embedded `category`.
+**Response** `200`
+
+```json
+{
+  "period": {
+    "year": 2026,
+    "month": 1,
+    "startDate": "2026-01-01",
+    "endDate": "2026-01-31"
+  },
+  "budget": {
+    "id": "<uuid>",
+    "totalBudget": "5000000.00",
+    "createdAt": "2026-01-01T00:00:00.000Z"
+  },
+  "totals": {
+    "totalAllocated": "5000000.00",
+    "totalActual": "120000.00"
+  }
+}
+```
+
+`budget` dapat **`null`** jika belum ada data anggaran untuk bulan tersebut.
+
+---
+
+#### `GET /budgets/items`
+
+Daftar **budget vs actual** per kategori pengeluaran untuk satu bulan, dengan pagination.
+
+**Query parameters**
+
+| Param   | Type   | Required | Description |
+| ------- | ------ | -------- | ----------- |
+| `year`  | string | **yes**  | e.g. `2026` |
+| `month` | string | **yes**  | `1`–`12` |
+| `page`  | string | no       | Default `"1"` |
+| `limit` | string | no       | Default `"10"`; maksimum **100** |
+
+**Response** `200`
+
+```json
+{
+  "period": {
+    "year": 2026,
+    "month": 1,
+    "startDate": "2026-01-01",
+    "endDate": "2026-01-31"
+  },
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 12,
+    "totalPages": 2
+  },
+  "items": [
+    {
+      "category": {
+        "id": "<uuid>",
+        "name": "Makanan",
+        "type": "expense",
+        "icon": "ShoppingBasket",
+        "color": "#F44336",
+        "createdAt": "2026-01-01T00:00:00.000Z"
+      },
+      "hasBudget": true,
+      "allocatedAmount": "500000.00",
+      "actualAmount": "120000.00",
+      "remaining": "380000.00",
+      "progressPercent": 24,
+      "isOverBudget": false
+    }
+  ]
+}
+```
+
+---
 
 #### `PUT /budgets`
 
-Creates or **replaces** the budget for that month (line items are fully replaced). Each `categoryId` must be an **expense** category owned by the user.
+Membuat atau **mengganti seluruh** budget untuk bulan tersebut (baris **`items`** diganti penuh). Setiap `categoryId` harus kategori **`expense`** milik user.
 
 **Body** (`application/json`)
 
 | Field          | Type   | Notes |
 | -------------- | ------ | ----- |
-| `year`         | number |       |
-| `month`        | number | 1–12  |
-| `totalBudget`  | string | Optional; overall cap; decimal string |
-| `items`        | array  | `{ "categoryId", "allocatedAmount" }` (amount pattern like transactions) |
+| `year`         | number | 1970–2100 |
+| `month`        | number | 1–12 |
+| `totalBudget`  | number | **Wajib**; harus lebih dari 0 (plafon bulanan) |
+| `items`        | array  | `{ "categoryId": "<uuid>", "allocatedAmount": <number> }`; **`allocatedAmount`** ≥ 0; tidak boleh duplikat `categoryId`; **jumlah semua `allocatedAmount` ≤ `totalBudget`** |
 
-**Response** `200` — same shape as `GET /budgets` for that month.
+**Response** `200` — sama seperti **`GET /budgets`** untuk bulan yang sama (ringkasan agregat saja).
+
+---
 
 #### `DELETE /budgets/:id`
 
-**Path parameters:** `id` — budget UUID (from `GET` response `budget.id`).
+**Path parameters:** `id` — budget UUID (dari **`GET /budgets`** → `budget.id`).
 
 **Response** `200`
 

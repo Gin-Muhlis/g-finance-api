@@ -7,6 +7,7 @@ import { transactions } from './transactions.ts';
 import { transactionAttachments } from './transaction-attachments.ts';
 import { budgets } from './budgets.ts';
 import { budgetItems } from './budget-items.ts';
+import { buckets } from './buckets.ts';
 
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
@@ -14,6 +15,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   categories: many(categories),
   transactions: many(transactions),
   budgets: many(budgets),
+  buckets: many(buckets),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -28,7 +30,15 @@ export const walletsRelations = relations(wallets, ({ one, many }) => ({
     fields: [wallets.userId],
     references: [users.id],
   }),
-  transactions: many(transactions),
+  transactions: many(transactions, {
+    relationName: 'wallet_transaction',
+  }),
+  transfersFrom: many(transactions, {
+    relationName: 'transfer_from_wallet',
+  }),
+  transfersTo: many(transactions, {
+    relationName: 'transfer_to_wallet',
+  }),
 }));
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
@@ -59,6 +69,14 @@ export const budgetItemsRelations = relations(budgetItems, ({ one }) => ({
   }),
 }));
 
+export const bucketsRelations = relations(buckets, ({ one, many }) => ({
+  user: one(users, {
+    fields: [buckets.userId],
+    references: [users.id],
+  }),
+  transactions: many(transactions),
+}));
+
 export const transactionsRelations = relations(
   transactions,
   ({ one, many }) => ({
@@ -69,10 +87,25 @@ export const transactionsRelations = relations(
     wallet: one(wallets, {
       fields: [transactions.walletId],
       references: [wallets.id],
+      relationName: 'wallet_transaction',
+    }),
+    fromWallet: one(wallets, {
+      fields: [transactions.fromWalletId],
+      references: [wallets.id],
+      relationName: 'transfer_from_wallet',
+    }),
+    toWallet: one(wallets, {
+      fields: [transactions.toWalletId],
+      references: [wallets.id],
+      relationName: 'transfer_to_wallet',
     }),
     category: one(categories, {
       fields: [transactions.categoryId],
       references: [categories.id],
+    }),
+    bucket: one(buckets, {
+      fields: [transactions.bucketId],
+      references: [buckets.id],
     }),
     transactionAttachments: many(transactionAttachments),
   }),

@@ -2,6 +2,7 @@ import Elysia, { t } from 'elysia';
 import { authGuard } from '../../common/middleware/auth.ts';
 import {
   createTransactionBody,
+  walletTransferBody,
   updateTransactionBody,
   transactionQuery,
   transactionResponse,
@@ -30,10 +31,14 @@ function formatAttachment(attachmentRow: {
 
 function formatTransaction(transactionRecord: {
   id: string;
-  walletId: string;
-  categoryId: string;
-  walletName: string | null;
-  categoryName: string | null;
+  walletId: string | null;
+  categoryId: string | null;
+  fromWalletId?: string | null;
+  toWalletId?: string | null;
+  bucketId?: string | null;
+  isAllocationWithdraw?: boolean;
+  walletName?: string | null;
+  categoryName?: string | null;
   type: string;
   amount: string;
   description: string | null;
@@ -53,6 +58,12 @@ function formatTransaction(transactionRecord: {
     id: transactionRecord.id,
     walletId: transactionRecord.walletId,
     categoryId: transactionRecord.categoryId,
+    fromWalletId: transactionRecord.fromWalletId ?? null,
+    toWalletId: transactionRecord.toWalletId ?? null,
+    bucketId: transactionRecord.bucketId ?? null,
+    isAllocationWithdraw: transactionRecord.isAllocationWithdraw,
+    walletName: transactionRecord.walletName ?? null,
+    categoryName: transactionRecord.categoryName ?? null,
     type: transactionRecord.type,
     amount: transactionRecord.amount,
     description: transactionRecord.description,
@@ -112,10 +123,12 @@ function formatWalletEmbedded(walletRecord: {
 function formatListTransactionItem(listItem: {
   id: string;
   userId: string;
-  walletId: string;
-  categoryId: string;
-  walletName: string | null;
-  categoryName: string | null;
+  walletId: string | null;
+  categoryId: string | null;
+  fromWalletId?: string | null;
+  toWalletId?: string | null;
+  bucketId?: string | null;
+  isAllocationWithdraw?: boolean;
   type: string;
   amount: string;
   description: string | null;
@@ -134,6 +147,34 @@ function formatListTransactionItem(listItem: {
     createdAt: Date;
     updatedAt: Date;
   } | null;
+  fromWallet:
+    | {
+        id: string;
+        userId: string;
+        name: string;
+        type: string;
+        balance: string;
+        currency: string;
+        icon: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      }
+    | null;
+  toWallet:
+    | {
+        id: string;
+        userId: string;
+        name: string;
+        type: string;
+        balance: string;
+        currency: string;
+        icon: string | null;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      }
+    | null;
   category: {
     id: string;
     userId: string;
@@ -149,6 +190,10 @@ function formatListTransactionItem(listItem: {
     userId: listItem.userId,
     walletId: listItem.walletId,
     categoryId: listItem.categoryId,
+    fromWalletId: listItem.fromWalletId ?? null,
+    toWalletId: listItem.toWalletId ?? null,
+    bucketId: listItem.bucketId ?? null,
+    isAllocationWithdraw: listItem.isAllocationWithdraw,
     type: listItem.type,
     amount: listItem.amount,
     description: listItem.description,
@@ -161,6 +206,10 @@ function formatListTransactionItem(listItem: {
       ? formatCategoryEmbedded(listItem.category)
       : null,
     wallet: listItem.wallet ? formatWalletEmbedded(listItem.wallet) : null,
+    fromWallet: listItem.fromWallet
+      ? formatWalletEmbedded(listItem.fromWallet)
+      : null,
+    toWallet: listItem.toWallet ? formatWalletEmbedded(listItem.toWallet) : null,
   };
 }
 
@@ -209,6 +258,21 @@ export const transactionModule = new Elysia({ prefix: '/transactions' })
       body: createTransactionBody,
       response: transactionResponse,
       detail: { tags: ['Transactions'], summary: 'Create a new transaction' },
+    },
+  )
+  .post(
+    '/wallet-transfer',
+    async ({ userId, body, set }) => {
+      await transactionService.createWalletTransfer(userId, body);
+      set.status = 204;
+    },
+    {
+      body: walletTransferBody,
+      detail: {
+        tags: ['Transactions'],
+        summary:
+          'Transfer between wallets (no bucket; not an allocation transfer); empty 204 response',
+      },
     },
   )
   .get(

@@ -4,7 +4,7 @@ import { categories } from '../../db/schema/categories.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { NotFoundError, ForbiddenError } from '../../common/errors.ts';
 
-type CategoryType = 'income' | 'expense' | 'allocation';
+type CategoryType = 'income' | 'expense';
 
 async function findCategoryOrFail(categoryId: string, userId: string) {
   const category = await db.query.categories.findFirst({

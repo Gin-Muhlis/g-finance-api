@@ -1,10 +1,27 @@
-import { eq, and, inArray, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, inArray, gte, lte, sql, isNotNull } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { budgets } from '../../db/schema/budgets.ts';
 import { budgetItems } from '../../db/schema/budget-items.ts';
 import { categories } from '../../db/schema/categories.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { ValidationError } from '../../common/errors.ts';
+
+type BudgetCategoryRow = {
+  category: {
+    id: string;
+    name: string;
+    type: string;
+    icon: string | null;
+    color: string | null;
+    createdAt: string;
+  };
+  hasBudget: boolean;
+  allocatedAmount: string | null;
+  actualAmount: string;
+  remaining: string | null;
+  progressPercent: number | null;
+  isOverBudget: boolean;
+};
 
 function getMonthDateRange(
   year: number,
@@ -16,6 +33,15 @@ function getMonthDateRange(
   const dayString = String(endOfMonth.getDate()).padStart(2, '0');
   const endDate = `${endOfMonth.getFullYear()}-${monthString}-${dayString}`;
   return { startDate, endDate };
+}
+
+function validateYearMonth(year: number, month: number) {
+  if (month < 1 || month > 12) {
+    throw new ValidationError('Month must be between 1 and 12');
+  }
+  if (year < 1970 || year > 2100) {
+    throw new ValidationError('Year is out of range');
+  }
 }
 
 function toMoneyString(raw: string | number | null | undefined): string {
@@ -32,15 +58,27 @@ function calcProgress(allocated: string, actual: string): number | null {
   return Math.round((actualAmount / allocatedAmount) * 10000) / 100;
 }
 
-type BudgetItemInput = { categoryId: string; allocatedAmount: string };
+type BudgetItemInput = { categoryId: string; allocatedAmount: number };
 
-export async function getBudgetSummary(userId: string, year: number, month: number) {
-  if (month < 1 || month > 12) {
-    throw new ValidationError('Month must be between 1 and 12');
+function sumAllocatedAmounts(items: BudgetItemInput[]): number {
+  let total = 0;
+  for (const line of items) {
+    const value = line.allocatedAmount;
+    if (Number.isNaN(value) || !Number.isFinite(value) || value < 0) {
+      throw new ValidationError('Invalid allocated amount in budget items');
+    }
+    total += value;
   }
-  if (year < 1970 || year > 2100) {
-    throw new ValidationError('Year is out of range');
-  }
+  return total;
+}
+
+/** Baris perkategori untuk bulan tertentu (urut nama kategori pengeluaran). */
+async function buildBudgetCategoryRows(
+  userId: string,
+  year: number,
+  month: number,
+): Promise<{ startDate: string; endDate: string; rows: BudgetCategoryRow[] }> {
+  validateYearMonth(year, month);
 
   const { startDate, endDate } = getMonthDateRange(year, month);
 
@@ -62,6 +100,7 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
         and(
           eq(transactions.userId, userId),
           eq(transactions.type, 'expense'),
+          isNotNull(transactions.categoryId),
           gte(transactions.transactionDate, startDate),
           lte(transactions.transactionDate, endDate),
         ),
@@ -80,7 +119,7 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
     actualRows.map((row) => [row.categoryId, toMoneyString(row.total)]),
   );
 
-  let itemAllocations = new Map<string, string>();
+  const itemAllocations = new Map<string, string>();
   if (budget) {
     const rows = await db.query.budgetItems.findMany({
       where: eq(budgetItems.budgetId, budget.id),
@@ -93,10 +132,7 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
     }
   }
 
-  let totalAllocated = 0;
-  let totalActual = 0;
-
-  const items = expenseCategories.map((expenseCategory) => {
+  const rows: BudgetCategoryRow[] = expenseCategories.map((expenseCategory) => {
     const actualAmount = toMoneyString(
       actualByCategory.get(expenseCategory.id) ?? '0',
     );
@@ -105,8 +141,6 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
     const allocatedStr = hasBudget ? allocated! : null;
     const actualNum = parseFloat(actualAmount);
     const allocNum = allocatedStr !== null ? parseFloat(allocatedStr) : 0;
-    if (hasBudget) totalAllocated += allocNum;
-    totalActual += actualNum;
 
     let remaining: string | null = null;
     let progressPercent: number | null = null;
@@ -136,22 +170,113 @@ export async function getBudgetSummary(userId: string, year: number, month: numb
     };
   });
 
+  return { startDate, endDate, rows };
+}
+
+/** Ringkasan bulanan tanpa daftar perkategori (agregat saja). */
+export async function getBudgetSummary(userId: string, year: number, month: number) {
+  validateYearMonth(year, month);
+
+  const { startDate, endDate } = getMonthDateRange(year, month);
+
+  const [budgetRow, txnSumRow] = await Promise.all([
+    db.query.budgets.findFirst({
+      where: and(
+        eq(budgets.userId, userId),
+        eq(budgets.year, year),
+        eq(budgets.month, month),
+      ),
+    }),
+    db
+      .select({
+        total: sql<string>`COALESCE(SUM(${transactions.amount}::numeric), 0)::text`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          eq(transactions.type, 'expense'),
+          isNotNull(transactions.categoryId),
+          gte(transactions.transactionDate, startDate),
+          lte(transactions.transactionDate, endDate),
+        ),
+      ),
+  ]);
+
+  const totalActual = txnSumRow[0]
+    ? toMoneyString(txnSumRow[0].total)
+    : toMoneyString(0);
+
   return {
-    period: { year, month, startDate, endDate },
-    budget: budget
+    period: {
+      year,
+      month,
+      startDate,
+      endDate,
+    },
+    budget: budgetRow
       ? {
-          id: budget.id,
-          totalBudget: budget.totalBudget
-            ? toMoneyString(String(budget.totalBudget))
+          id: budgetRow.id,
+          totalBudget: budgetRow.totalBudget
+            ? toMoneyString(String(budgetRow.totalBudget))
             : null,
-          createdAt: budget.createdAt.toISOString(),
+          createdAt: budgetRow.createdAt.toISOString(),
         }
       : null,
-    items,
     totals: {
-      totalAllocated: toMoneyString(String(totalAllocated)),
-      totalActual: toMoneyString(String(totalActual)),
+      totalAllocated: budgetRow?.totalBudget
+        ? toMoneyString(String(budgetRow.totalBudget))
+        : toMoneyString(0),
+      totalActual,
     },
+  };
+}
+
+/** Daftar perkategori dengan pagination (filter year, month; user dari auth). */
+export async function getBudgetItemsByCategory(
+  userId: string,
+  year: number,
+  month: number,
+  page: number,
+  limit: number,
+) {
+  validateYearMonth(year, month);
+
+  if (page < 1) {
+    throw new ValidationError('page must be at least 1');
+  }
+  if (limit < 1) {
+    throw new ValidationError('limit must be at least 1');
+  }
+
+  const { startDate, endDate, rows } = await buildBudgetCategoryRows(
+    userId,
+    year,
+    month,
+  );
+
+  const total = rows.length;
+  const totalPages = Math.ceil(total / limit) || (total === 0 ? 0 : 1);
+  const safePage =
+    total === 0 ? 1 : Math.min(page, Math.max(1, totalPages));
+
+  const offset = (safePage - 1) * limit;
+  const items = rows.slice(offset, offset + limit);
+
+  return {
+    period: {
+      year,
+      month,
+      startDate,
+      endDate,
+    },
+    pagination: {
+      page: safePage,
+      limit,
+      total,
+      totalPages: total === 0 ? 0 : totalPages,
+    },
+    items,
   };
 }
 
@@ -160,7 +285,7 @@ export async function upsertBudget(
   data: {
     year: number;
     month: number;
-    totalBudget?: string | null;
+    totalBudget: number;
     items: BudgetItemInput[];
   },
 ) {
@@ -177,6 +302,19 @@ export async function upsertBudget(
       throw new ValidationError('Duplicate category in budget items');
     }
     seen.add(line.categoryId);
+  }
+
+  const cap = data.totalBudget;
+  if (Number.isNaN(cap) || !Number.isFinite(cap) || cap <= 0) {
+    throw new ValidationError(
+      'totalBudget must be provided and greater than zero',
+    );
+  }
+  const totalAllocated = sumAllocatedAmounts(data.items);
+  if (totalAllocated > cap + 1e-6) {
+    throw new ValidationError(
+      'Sum of allocated amounts must not exceed total budget',
+    );
   }
 
   if (data.items.length > 0) {
@@ -208,10 +346,7 @@ export async function upsertBudget(
       ),
     });
 
-    const totalBudgetValue =
-      data.totalBudget != null && data.totalBudget !== ''
-        ? data.totalBudget
-        : null;
+    const totalBudgetValue = toMoneyString(data.totalBudget);
 
     let budgetId: string;
     if (existing) {
@@ -243,7 +378,7 @@ export async function upsertBudget(
         data.items.map((line) => ({
           budgetId,
           categoryId: line.categoryId,
-          allocatedAmount: line.allocatedAmount,
+          allocatedAmount: toMoneyString(line.allocatedAmount),
         })),
       );
     }

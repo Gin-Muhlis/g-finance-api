@@ -85,19 +85,19 @@ export const DEFAULT_CATEGORIES = [
   },
   {
     name: 'Dana darurat',
-    type: 'allocation' as const,
+    type: 'expense' as const,
     icon: 'PiggyBank',
     color: '#388E3C',
   },
   {
     name: 'Tabungan tujuan',
-    type: 'allocation' as const,
+    type: 'expense' as const,
     icon: 'Vault',
     color: '#5C6BC0',
   },
   {
     name: 'Alokasi investasi',
-    type: 'allocation' as const,
+    type: 'expense' as const,
     icon: 'ChartPie',
     color: '#8E24AA',
   },

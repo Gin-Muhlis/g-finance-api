@@ -6,6 +6,7 @@ export { transactions, transactionTypeEnum } from './transactions.ts';
 export { transactionAttachments } from './transaction-attachments.ts';
 export { budgets } from './budgets.ts';
 export { budgetItems } from './budget-items.ts';
+export { buckets } from './buckets.ts';
 
 export {
   usersRelations,
@@ -16,4 +17,5 @@ export {
   transactionAttachmentsRelations,
   budgetsRelations,
   budgetItemsRelations,
+  bucketsRelations,
 } from './relations.ts';

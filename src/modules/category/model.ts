@@ -3,7 +3,6 @@ import { t } from 'elysia';
 const categoryTypes = t.Union([
   t.Literal('income'),
   t.Literal('expense'),
-  t.Literal('allocation'),
 ]);
 
 export const createCategoryBody = t.Object({
