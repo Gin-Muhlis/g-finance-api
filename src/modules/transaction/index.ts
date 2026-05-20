@@ -5,8 +5,10 @@ import {
   walletTransferBody,
   updateTransactionBody,
   transactionQuery,
+  recentTransactionQuery,
   transactionResponse,
   transactionListResponse,
+  recentTransactionListResponse,
 } from './model.ts';
 import { messageResponse } from '../auth/model.ts';
 import * as transactionService from './service.ts';
@@ -219,7 +221,7 @@ export const transactionModule = new Elysia({ prefix: '/transactions' })
     '/',
     async ({ userId, query }) => {
       const result = await transactionService.listTransactions(userId, {
-        type: query.type as 'income' | 'expense' | undefined,
+        type: query.type as 'income' | 'expense' | 'transfer' | undefined,
         walletId: query.walletId,
         categoryId: query.categoryId,
         startDate: query.startDate,
@@ -242,6 +244,29 @@ export const transactionModule = new Elysia({ prefix: '/transactions' })
         tags: ['Transactions'],
         summary:
           'List transactions grouped by day; requires startDate and endDate; includes totals',
+      },
+    },
+  )
+  .get(
+    '/recent',
+    async ({ userId, query }) => {
+      const parsedLimit = parseInt(query.limit ?? '5', 10);
+      const rows = await transactionService.listRecentTransactions(userId, {
+        type: query.type as 'income' | 'expense' | 'transfer' | undefined,
+        walletId: query.walletId,
+        categoryId: query.categoryId,
+        search: query.search,
+        limit: Number.isNaN(parsedLimit) ? 5 : parsedLimit,
+      });
+      return rows.map(formatListTransactionItem);
+    },
+    {
+      query: recentTransactionQuery,
+      response: recentTransactionListResponse,
+      detail: {
+        tags: ['Transactions'],
+        summary:
+          'Recent income, expense, and transfer transactions with dashboard filters',
       },
     },
   )

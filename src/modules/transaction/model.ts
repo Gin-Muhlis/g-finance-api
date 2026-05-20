@@ -1,6 +1,11 @@
 import { t } from 'elysia';
 
 const transactionTypes = t.Union([t.Literal('income'), t.Literal('expense')]);
+const transactionListTypes = t.Union([
+  t.Literal('income'),
+  t.Literal('expense'),
+  t.Literal('transfer'),
+]);
 
 export const createTransactionBody = t.Object({
   walletId: t.String({ format: 'uuid' }),
@@ -29,11 +34,19 @@ export const updateTransactionBody = t.Object({
 });
 
 export const transactionQuery = t.Object({
-  type: t.Optional(transactionTypes),
+  type: t.Optional(transactionListTypes),
   walletId: t.Optional(t.String()),
   categoryId: t.Optional(t.String()),
   startDate: t.String({ format: 'date' }),
   endDate: t.String({ format: 'date' }),
+});
+
+export const recentTransactionQuery = t.Object({
+  type: t.Optional(transactionListTypes),
+  walletId: t.Optional(t.String()),
+  categoryId: t.Optional(t.String()),
+  search: t.Optional(t.String()),
+  limit: t.Optional(t.String({ default: '5' })),
 });
 
 const attachmentResponse = t.Object({
@@ -120,3 +133,5 @@ export const transactionListResponse = t.Object({
   totalIncome: t.String(),
   totalExpense: t.String(),
 });
+
+export const recentTransactionListResponse = t.Array(transactionListItemResponse);
