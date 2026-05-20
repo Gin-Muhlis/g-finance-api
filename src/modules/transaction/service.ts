@@ -1,4 +1,15 @@
-import { eq, and, or, gte, lte, sql, desc, isNull, inArray } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  or,
+  gte,
+  lte,
+  sql,
+  desc,
+  isNull,
+  inArray,
+  ilike,
+} from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { transactions } from '../../db/schema/transactions.ts';
 import { transactionAttachments } from '../../db/schema/transaction-attachments.ts';
@@ -22,6 +33,7 @@ function parsePositiveAmount(amount: string): number {
 }
 
 type TransactionType = 'income' | 'expense';
+type TransactionListType = TransactionType | 'transfer';
 
 /** `db` atau `tx` dari `db.transaction` (keduanya punya `.query` / `.select` / …). */
 type DbOrTransaction =
@@ -142,7 +154,7 @@ export async function recalculateWalletBalance(
 }
 
 interface ListOptions {
-  type?: TransactionType;
+  type?: TransactionListType;
   walletId?: string;
   categoryId?: string;
   startDate: string;
@@ -152,7 +164,9 @@ interface ListOptions {
 function listTransactionsWhere(userId: string, opts: ListOptions) {
   /** Transfer alokasi memakai `bucketId`; transfer dompet (tanpa bucket) memakai `bucketId` null. */
   const typeScope = opts.type
-    ? eq(transactions.type, opts.type)
+    ? opts.type === 'transfer'
+      ? eq(transactions.type, 'transfer')
+      : eq(transactions.type, opts.type)
     : or(
         inArray(transactions.type, ['income', 'expense']),
         and(eq(transactions.type, 'transfer'), isNull(transactions.bucketId)),
@@ -165,8 +179,14 @@ function listTransactionsWhere(userId: string, opts: ListOptions) {
     typeScope,
   ];
 
-  if (opts.type) conditions.push(eq(transactions.type, opts.type));
-  if (opts.walletId) conditions.push(eq(transactions.walletId, opts.walletId));
+  if (opts.walletId) {
+    const walletCondition = or(
+      eq(transactions.walletId, opts.walletId),
+      eq(transactions.fromWalletId, opts.walletId),
+      eq(transactions.toWalletId, opts.walletId),
+    );
+    if (walletCondition) conditions.push(walletCondition);
+  }
   if (opts.categoryId)
     conditions.push(eq(transactions.categoryId, opts.categoryId));
 
@@ -238,6 +258,57 @@ export async function listTransactions(userId: string, opts: ListOptions) {
     totalIncome: formatSumAmount(incomeRow[0]?.total),
     totalExpense: formatSumAmount(expenseRow[0]?.total),
   };
+}
+
+interface RecentListOptions {
+  type?: TransactionListType;
+  walletId?: string;
+  categoryId?: string;
+  search?: string;
+  limit: number;
+}
+
+export async function listRecentTransactions(
+  userId: string,
+  opts: RecentListOptions,
+) {
+  const conditions = [
+    eq(transactions.userId, userId),
+    opts.type
+      ? eq(transactions.type, opts.type)
+      : inArray(transactions.type, ['income', 'expense', 'transfer']),
+  ];
+
+  if (opts.walletId) {
+    const walletCondition = or(
+      eq(transactions.walletId, opts.walletId),
+      eq(transactions.fromWalletId, opts.walletId),
+      eq(transactions.toWalletId, opts.walletId),
+    );
+    if (walletCondition) conditions.push(walletCondition);
+  }
+
+  if (opts.categoryId) {
+    conditions.push(eq(transactions.categoryId, opts.categoryId));
+  }
+
+  const search = opts.search?.trim();
+  if (search) {
+    const pattern = `%${search}%`;
+    const searchCondition = or(
+      ilike(transactions.description, pattern),
+      ilike(transactions.walletName, pattern),
+      ilike(transactions.categoryName, pattern),
+    );
+    if (searchCondition) conditions.push(searchCondition);
+  }
+
+  return db.query.transactions.findMany({
+    where: and(...conditions),
+    with: { wallet: true, category: true, fromWallet: true, toWallet: true },
+    orderBy: [desc(transactions.transactionDate), desc(transactions.createdAt)],
+    limit: Math.min(Math.max(opts.limit, 1), 100),
+  });
 }
 
 export async function getTransaction(transactionId: string, userId: string) {
