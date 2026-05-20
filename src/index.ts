@@ -12,6 +12,7 @@ import { transactionModule } from './modules/transaction/index.ts';
 import { budgetModule } from './modules/budget/index.ts';
 import { bucketModule } from './modules/bucket/index.ts';
 import { allocationModule } from './modules/allocation/index.ts';
+import { dashboardModule } from './modules/dashboard/index.ts';
 
 /** Elysia `onError` error union includes types without `message` (e.g. custom status). */
 function getErrorMessage(error: unknown): string {
@@ -51,6 +52,7 @@ const app = new Elysia()
           { name: 'Budgets', description: 'Monthly expense budgets vs actuals' },
           { name: 'Buckets', description: 'Savings / goal buckets (allocation envelopes)' },
           { name: 'Allocations', description: 'Wallet transfers tagged to buckets' },
+          { name: 'Dashboard', description: 'Dashboard-specific aggregate and list endpoints' },
         ],
       },
     }),
@@ -105,7 +107,8 @@ const app = new Elysia()
       .use(transactionModule)
       .use(budgetModule)
       .use(bucketModule)
-      .use(allocationModule),
+      .use(allocationModule)
+      .use(dashboardModule),
   )
   .listen({
     port: config.port,
