@@ -1,4 +1,4 @@
-import { config } from '@/common/config.ts';
+import { config } from '../common/config.ts';
 
 const textEncoder = new TextEncoder();
 
