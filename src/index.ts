@@ -28,35 +28,46 @@ function getErrorMessage(error: unknown): string {
   return '';
 }
 
-const app = new Elysia()
-  .use(
-    cors({
-      origin: true,
-      credentials: true,
-    }),
-  )
-  .use(
-    swagger({
-      documentation: {
-        info: {
-          title: 'G-Finance API',
-          version: '1.0.0',
-          description: 'Personal finance tracking REST API',
-        },
-        tags: [
-          { name: 'Auth', description: 'Authentication endpoints' },
-          { name: 'Users', description: 'User management' },
-          { name: 'Wallets', description: 'Wallet/savings management' },
-          { name: 'Categories', description: 'Transaction categories' },
-          { name: 'Transactions', description: 'Income & expense tracking' },
-          { name: 'Budgets', description: 'Monthly expense budgets vs actuals' },
-          { name: 'Buckets', description: 'Savings / goal buckets (allocation envelopes)' },
-          { name: 'Allocations', description: 'Wallet transfers tagged to buckets' },
-          { name: 'Dashboard', description: 'Dashboard-specific aggregate and list endpoints' },
-        ],
-      },
-    }),
-  )
+const swaggerDocumentation = {
+  info: {
+    title: 'G-Finance API',
+    version: '1.0.0',
+    description: 'Personal finance tracking REST API',
+  },
+  tags: [
+    { name: 'Auth', description: 'Authentication endpoints' },
+    { name: 'Users', description: 'User management' },
+    { name: 'Wallets', description: 'Wallet/savings management' },
+    { name: 'Categories', description: 'Transaction categories' },
+    { name: 'Transactions', description: 'Income & expense tracking' },
+    { name: 'Budgets', description: 'Monthly expense budgets vs actuals' },
+    {
+      name: 'Buckets',
+      description: 'Savings / goal buckets (allocation envelopes)',
+    },
+    {
+      name: 'Allocations',
+      description: 'Wallet transfers tagged to buckets',
+    },
+    {
+      name: 'Dashboard',
+      description: 'Dashboard-specific aggregate and list endpoints',
+    },
+  ],
+};
+
+const appWithCors = new Elysia().use(
+  cors({
+    origin: config.corsOrigin,
+    credentials: true,
+  }),
+);
+
+const app = (
+  config.swaggerEnabled
+    ? appWithCors.use(swagger({ documentation: swaggerDocumentation }))
+    : appWithCors
+)
   .use(loggerMiddleware)
   .onError(({ error, set }) => {
     if (error instanceof AppError) {
@@ -96,7 +107,7 @@ const app = new Elysia()
   .get('/', () => ({
     name: 'G-Finance API',
     version: '1.0.0',
-    docs: '/swagger',
+    ...(config.swaggerEnabled ? { docs: '/swagger' as const } : {}),
   }))
   .group('/api', (app) =>
     app
@@ -118,8 +129,10 @@ const app = new Elysia()
 logger.info(
   `🚀 G-Finance API running at http://${app.server?.hostname}:${app.server?.port}`,
 );
-logger.info(
-  `📚 Swagger docs at http://${app.server?.hostname}:${app.server?.port}/swagger`,
-);
+if (config.swaggerEnabled) {
+  logger.info(
+    `📚 Swagger docs at http://${app.server?.hostname}:${app.server?.port}/swagger`,
+  );
+}
 
 export type App = typeof app;
