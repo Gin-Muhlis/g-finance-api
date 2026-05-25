@@ -436,12 +436,11 @@ Results are ordered by **name** (ascending).
 
 All routes require **Bearer** access token.
 
-The data model supports **`income`**, **`expense`**, **`transfer`** (termasuk alokasi ber-bucket). **`GET /transactions`** mengembalikan:
+The data model supports **`income`**, **`expense`**, **`transfer`** (termasuk alokasi ber-bucket). **`GET /transactions`** mengembalikan semua **`income`**, **`expense`**, dan **`transfer`** (termasuk transfer dompet biasa maupun alokasi bucket) dalam rentang tanggal.
 
-- semua **`income`** dan **`expense`** dalam rentang tanggal;
-- plus **`transfer`** yang **bukan** alokasi bucket (**`bucketId` null**) — pemindahan antar dompet via **`POST /transactions/wallet-transfer`**.
-
-Transfer yang punya **`bucketId`** (alur [Allocations](#allocations)) **tidak** muncul di endpoint ini — gunakan **`GET /allocations`**.
+- Transfer dompet (tanpa bucket) dibuat via **`POST /transactions/wallet-transfer`** dengan **`bucketId` null**.
+- Transfer alokasi (dengan bucket) dibuat via [Allocations](#allocations) dengan **`bucketId`** terisi.
+- Endpoint **`GET /allocations`** menyediakan view khusus untuk alokasi dengan relasi bucket.
 
 Saat **`POST /transactions`** atau **`PUT /transactions/:id`**, **`categoryId`** harus mengarah ke kategori **`type`** yang sama dengan transaksi (**hanya** `income` atau `expense`).
 
@@ -459,9 +458,9 @@ Optional filters: `type`, `walletId`, `categoryId`. Untuk **`transfer`** tanpa b
 | ------------ | ------ | -------- | ----------- |
 | `startDate`  | string | **yes**  | ISO date `YYYY-MM-DD` (inclusive) |
 | `endDate`    | string | **yes**  | ISO date `YYYY-MM-DD` (inclusive) |
-| `type`       | string | no       | `income` atau `expense` (filter ketat; transfer tidak ikut jika dipilih) |
-| `walletId`   | string | no       | Filter by wallet UUID |
-| `categoryId` | string | no       | Filter by category UUID |
+| `type`       | string | no       | `income`, `expense`, atau `transfer`; jika tidak diisi, semua type dikembalikan |
+| `walletId`   | string | no       | Filter by wallet UUID (untuk transfer: cek `walletId`, `fromWalletId`, atau `toWalletId`) |
+| `categoryId` | string | no       | Filter by category UUID (transfer tidak punya category, jadi tidak akan match) |
 
 **Response** `200`
 
@@ -519,9 +518,9 @@ Optional filters: `type`, `walletId`, `categoryId`. Untuk **`transfer`** tanpa b
 }
 ```
 
-Pada **`transfer`** dompet (tanpa bucket), **`wallet`** / **`category`** bisa **`null`** dan **`fromWallet`** / **`toWallet`** terisi (saldo dompet di objek embed adalah string desimal).
+Pada transaksi **`transfer`** (baik dengan atau tanpa bucket), **`wallet`** / **`category`** adalah **`null`**, dan **`fromWallet`** / **`toWallet`** terisi. Transfer dengan **`bucketId`** tidak null adalah alokasi bucket. Field **`isAllocationWithdraw`** menandai apakah transfer adalah penarikan (`true`) atau alokasi (`false`). Saldo dompet di objek embed adalah string desimal.
 
-A **day** appears only if there is at least one transaction on that day in the range.
+Hari hanya muncul jika ada minimal satu transaksi di hari tersebut dalam rentang tanggal.
 
 ---
 

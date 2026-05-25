@@ -162,15 +162,9 @@ interface ListOptions {
 }
 
 function listTransactionsWhere(userId: string, opts: ListOptions) {
-  /** Transfer alokasi memakai `bucketId`; transfer dompet (tanpa bucket) memakai `bucketId` null. */
   const typeScope = opts.type
-    ? opts.type === 'transfer'
-      ? eq(transactions.type, 'transfer')
-      : eq(transactions.type, opts.type)
-    : or(
-        inArray(transactions.type, ['income', 'expense']),
-        and(eq(transactions.type, 'transfer'), isNull(transactions.bucketId)),
-      );
+    ? eq(transactions.type, opts.type)
+    : inArray(transactions.type, ['income', 'expense', 'transfer']);
 
   const conditions = [
     eq(transactions.userId, userId),

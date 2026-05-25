@@ -1,4 +1,4 @@
-import { eq, and, inArray, gte, lte, sql, isNotNull } from 'drizzle-orm';
+import { eq, and, inArray, gte, lte, sql, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../../common/database.ts';
 import { budgets } from '../../db/schema/budgets.ts';
 import { budgetItems } from '../../db/schema/budget-items.ts';
@@ -87,6 +87,7 @@ async function buildBudgetCategoryRows(
       where: and(
         eq(categories.userId, userId),
         eq(categories.type, 'expense'),
+        isNull(categories.deletedAt),
       ),
       orderBy: (category, { asc }) => [asc(category.name)],
     }),
@@ -321,6 +322,7 @@ export async function upsertBudget(
     const matchingCategories = await db.query.categories.findMany({
       where: and(
         eq(categories.userId, userId),
+        isNull(categories.deletedAt),
         inArray(
           categories.id,
           data.items.map((line) => line.categoryId),

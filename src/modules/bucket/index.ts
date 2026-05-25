@@ -1,9 +1,11 @@
-import Elysia from 'elysia';
+import Elysia, { t } from 'elysia';
 import { authGuard } from '../../common/middleware/auth.ts';
 import {
   createBucketBody,
   createBucketResponse,
   bucketListResponse,
+  updateBucketBody,
+  messageResponse,
 } from './model.ts';
 import * as bucketService from './service.ts';
 
@@ -78,5 +80,36 @@ export const bucketModule = new Elysia({ prefix: '/buckets' })
       body: createBucketBody,
       response: createBucketResponse,
       detail: { tags: ['Buckets'], summary: 'Create a bucket' },
+    },
+  )
+  .put(
+    '/:id',
+    async ({ userId, params, body }) => {
+      const bucket = await bucketService.updateBucket(userId, params.id, {
+        name: body.name,
+        type: body.type,
+        targetAmount: body.targetAmount,
+        icon: body.icon,
+        color: body.color,
+      });
+      return formatCreatedBucket(bucket);
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: updateBucketBody,
+      response: createBucketResponse,
+      detail: { tags: ['Buckets'], summary: 'Update bucket' },
+    },
+  )
+  .delete(
+    '/:id',
+    async ({ userId, params }) => {
+      await bucketService.deleteBucket(userId, params.id);
+      return { message: 'Bucket deleted successfully' };
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      response: messageResponse,
+      detail: { tags: ['Buckets'], summary: 'Delete bucket' },
     },
   );

@@ -104,3 +104,45 @@ export async function findBucketOrThrow(userId: string, bucketId: string) {
   if (!row) throw new NotFoundError('Bucket');
   return row;
 }
+
+type UpdateBucketInput = {
+  name?: string;
+  type?: string;
+  targetAmount?: string;
+  icon?: string;
+  color?: string;
+};
+
+export async function updateBucket(
+  userId: string,
+  bucketId: string,
+  data: UpdateBucketInput,
+) {
+  await findBucketOrThrow(userId, bucketId);
+
+  const updateData: Record<string, unknown> = {};
+  if (data.name !== undefined) updateData.name = data.name;
+  if (data.type !== undefined) updateData.type = data.type ?? null;
+  if (data.targetAmount !== undefined)
+    updateData.targetAmount = data.targetAmount ?? null;
+  if (data.icon !== undefined) updateData.icon = data.icon ?? null;
+  if (data.color !== undefined) updateData.color = data.color ?? null;
+
+  const [updated] = await db
+    .update(buckets)
+    .set(updateData)
+    .where(and(eq(buckets.id, bucketId), eq(buckets.userId, userId)))
+    .returning();
+
+  return updated!;
+}
+
+export async function deleteBucket(userId: string, bucketId: string) {
+  await findBucketOrThrow(userId, bucketId);
+
+  await db
+    .delete(buckets)
+    .where(and(eq(buckets.id, bucketId), eq(buckets.userId, userId)));
+
+  return true;
+}
