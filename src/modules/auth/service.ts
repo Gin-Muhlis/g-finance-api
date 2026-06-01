@@ -9,6 +9,7 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
   getRefreshTokenExpiresAt,
+  getRefreshTokenLifetimeSeconds,
 } from '../../utils/jwt.ts';
 import {
   ConflictError,
@@ -102,6 +103,11 @@ export async function refresh(token: string) {
   if (!payload) {
     throw new UnauthorizedError('Invalid or expired refresh token');
   }
+  const tokenLifetimeSeconds = payload.exp - payload.iat;
+  const rememberMe =
+    typeof payload.rememberMe === 'boolean'
+      ? payload.rememberMe
+      : tokenLifetimeSeconds > getRefreshTokenLifetimeSeconds(false);
 
   const tokenHash = hashToken(token);
 
@@ -131,9 +137,9 @@ export async function refresh(token: string) {
     name: user.name,
     email: user.email,
   });
-  const newRefreshToken = await generateRefreshToken(stored.userId);
+  const newRefreshToken = await generateRefreshToken(stored.userId, rememberMe);
   const newTokenHash = hashToken(newRefreshToken);
-  const expiresAt = getRefreshTokenExpiresAt();
+  const expiresAt = getRefreshTokenExpiresAt(rememberMe);
 
   await db.insert(refreshTokens).values({
     userId: stored.userId,

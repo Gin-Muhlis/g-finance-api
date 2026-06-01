@@ -144,7 +144,7 @@ export async function generateRefreshToken(
     : config.jwt.refreshExpiresIn;
 
   return signJwt(
-    { sub: userId, type: 'refresh' },
+    { sub: userId, type: 'refresh', rememberMe },
     config.jwt.refreshSecret,
     expiresIn,
   );
@@ -178,9 +178,13 @@ export async function verifyRefreshToken(
 }
 
 export function getRefreshTokenExpiresAt(rememberMe = false): Date {
+  const seconds = getRefreshTokenLifetimeSeconds(rememberMe);
+  return new Date(Date.now() + seconds * 1000);
+}
+
+export function getRefreshTokenLifetimeSeconds(rememberMe = false): number {
   const duration = rememberMe
     ? config.jwt.refreshRememberExpiresIn
     : config.jwt.refreshExpiresIn;
-  const seconds = parseDuration(duration);
-  return new Date(Date.now() + seconds * 1000);
+  return parseDuration(duration);
 }
