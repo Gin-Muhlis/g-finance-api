@@ -100,9 +100,15 @@ export async function login(data: {
 
 export async function refresh(token: string) {
   const payload = await verifyRefreshToken(token);
+
   if (!payload) {
     throw new UnauthorizedError('Invalid or expired refresh token');
   }
+
+  if (payload.type !== 'refresh') {
+    throw new UnauthorizedError('Token is not a refresh token');
+  }
+
   const tokenLifetimeSeconds = payload.exp - payload.iat;
   const rememberMe =
     typeof payload.rememberMe === 'boolean'

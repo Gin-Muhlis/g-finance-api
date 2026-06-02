@@ -95,7 +95,10 @@ async function verifyJwtRaw(
 ): Promise<JwtPayload | null> {
   try {
     const parts = token.split('.');
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) {
+      console.log('[JWT] Invalid token format: expected 3 parts, got', parts.length);
+      return null;
+    }
 
     const key = await importKey(secret);
     const data = `${parts[0]}.${parts[1]}`;
@@ -107,18 +110,28 @@ async function verifyJwtRaw(
       new Uint8Array(signature),
       textEncoder.encode(data),
     );
-    if (!valid) return null;
+    if (!valid) {
+      console.log('[JWT] Invalid signature');
+      return null;
+    }
 
     const payload = JSON.parse(
       new TextDecoder().decode(base64UrlDecode(parts[1]!)),
     ) as JwtPayload;
 
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) {
+      console.log('[JWT] Token expired:', {
+        exp: payload.exp,
+        now: now,
+        diff: now - payload.exp,
+      });
       return null;
     }
 
     return payload;
-  } catch {
+  } catch (error) {
+    console.log('[JWT] Error verifying token:', error);
     return null;
   }
 }
